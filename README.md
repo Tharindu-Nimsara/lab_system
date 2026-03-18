@@ -1,1 +1,1 @@
-Dedicated frontend file
+Dedicated frontend file.
