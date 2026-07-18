@@ -51,6 +51,21 @@ public class PatientController {
         return search.isBlank() ? List.of() : service.search(search.trim());
     }
 
+    /** Active patients already on this phone — reception checks before creating a duplicate. */
+    @GetMapping("/duplicates")
+    public List<Patient> duplicates(@RequestParam("phone") String phone) {
+        return service.duplicatesByPhone(phone);
+    }
+
+    /** Merge a duplicate into the surviving record (admin only). */
+    public record MergeRequest(Long sourceId, Long targetId) {}
+
+    @PostMapping("/merge")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public Patient merge(@RequestBody MergeRequest req, HttpServletRequest http) {
+        return service.merge(req.sourceId(), req.targetId(), http.getRemoteAddr());
+    }
+
     @GetMapping("/{id}")
     public Patient get(@PathVariable Long id, HttpServletRequest http) {
         return service.view(id, http.getRemoteAddr());

@@ -31,6 +31,8 @@ export default function PosPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
+  const [dupes, setDupes] = useState<Patient[]>([]);
+
   const [tests, setTests] = useState<LabTest[]>([]);
   const [selected, setSelected] = useState<Map<number, LabTest>>(new Map());
   const [discount, setDiscount] = useState("0");
@@ -57,6 +59,21 @@ export default function PosPage() {
     }, 250);
     return () => clearTimeout(t);
   }, [query]);
+
+  // Warn if the phone typed into the new-patient form already belongs to someone.
+  useEffect(() => {
+    const phone = form.phone.trim();
+    if (!showCreate || phone.length < 4) {
+      setDupes([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api<Patient[]>(`/patients/duplicates?phone=${encodeURIComponent(phone)}`)
+        .then(setDupes)
+        .catch(() => setDupes([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [form.phone, showCreate]);
 
   const subtotal = useMemo(
     () => [...selected.values()].reduce((s, t) => s + Number(t.price), 0),
@@ -99,6 +116,7 @@ export default function PosPage() {
       setPatient(p);
       setShowCreate(false);
       setForm(EMPTY_FORM);
+      setDupes([]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create patient");
     }
@@ -236,6 +254,35 @@ export default function PosPage() {
                       <option>Female</option>
                       <option>Other</option>
                     </select>
+                    {dupes.length > 0 && (
+                      <div className="col-span-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+                        <p className="mb-1 font-medium">
+                          ⚠ {dupes.length} patient{dupes.length === 1 ? "" : "s"} already on this
+                          phone — use an existing record instead of creating a duplicate?
+                        </p>
+                        <ul className="space-y-1">
+                          {dupes.map((d) => (
+                            <li key={d.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPatient(d);
+                                  setShowCreate(false);
+                                  setForm(EMPTY_FORM);
+                                  setDupes([]);
+                                }}
+                                className="w-full rounded bg-white px-2 py-1 text-left hover:bg-amber-100 dark:bg-gray-900 dark:hover:bg-gray-800"
+                              >
+                                <span className="font-medium">{d.name}</span>{" "}
+                                <span className="text-gray-500">
+                                  ({d.patientNo}){d.age != null ? ` · ${d.age} yrs` : ""}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <input
                       type="email"
                       placeholder="Email"

@@ -1,0 +1,81 @@
+# Implementation Progress
+
+**Project:** Medical Laboratory Management System
+**Stack:** Spring Boot 4 (Java 21) · PostgreSQL 16 · Next.js 16 + Tailwind
+**Repo:** `origin` → https://github.com/Tharindu-Nimsara/lab_ms_frontend.git
+**Active branch:** `feature/phase-1-mvp`
+
+> Living document. Updated as work lands. Dates are ISO (yyyy-mm-dd).
+
+---
+
+## Legend
+✅ done & verified · 🟡 partial / needs polish · ⬜ not started · 🔜 next up
+
+---
+
+## Phase 0 — Foundations
+| Item | Status | Notes |
+|---|---|---|
+| Spring Boot 4 scaffold, Maven wrapper | ✅ | Boot 4 modular auto-config (starter-flyway, session-jdbc) |
+| Flyway V1 schema | ✅ | All core tables + sequences |
+| Spring Security session auth + RBAC | ✅ | BCrypt, SPA CSRF, `@PreAuthorize` + URL rules |
+| Base React/Next layout + Nav | ✅ | POS, Worklist, Patients, Admin, Login |
+| Seed data | ✅ | 1 branch, 3 users, 2 templates (FBS, Lipid) |
+| Deployment pipeline to staging | ⬜ | No CI/CD yet |
+
+## Phase 1 — MVP (Money Path)
+| Item | Status | Notes |
+|---|---|---|
+| Test catalog CRUD — backend | ✅ | `CatalogController` tests + templates, admin-gated |
+| Test catalog CRUD — **admin UI** | ✅ | `/catalog` page: create/edit/activate tests, view templates |
+| Patient registration + search/auto-fill | ✅ | By age (auto-advancing), editable DOB, special note |
+| Transactional POS billing + dual bill print | ✅ | `BillingService` atomic; `BillPdfService` A5 dual copy |
+| Lab worklist + result entry from templates | ✅ | `WorklistController`, JSONB-driven form |
+| Server-side H/L flagging | ✅ | `FlaggingService` + unit test |
+| JasperReports lab report PDF | 🟡 | OpenPDF placeholder until real samples collected |
+| Report finalize + print | ✅ | `ReportService` finalize gate, `ReportPdfService` A4 |
+| **Merge-duplicates tool** (§5.2) | ✅ | Admin merge on patient detail; repoints invoices+reports, audited |
+| **Duplicate-phone warning at registration** | ✅ | POS quick-create warns + offers existing records |
+| Soft-delete for patients | ✅ | V3 `deleted_at`; search/lookup exclude deleted |
+
+## Phase 2 — Delivery & Financials
+| Item | Status | Notes |
+|---|---|---|
+| Expense tracking | ✅ | `FinanceController` + admin UI form |
+| Daily cash-flow / Monthly P&L | ✅ | Admin-only summaries |
+| Dashboard KPIs + revenue charts | ✅ | `AdminController` /stats, 14-day series |
+| Email report delivery (consent-gated) | ⬜ | SES/Resend |
+| WhatsApp Business API delivery | ⬜ | Apply early — Meta approval slow |
+
+## Phase 3 — Analytics & Hardening
+| Item | Status | Notes |
+|---|---|---|
+| Audit log viewer | 🟡 | `/audit` endpoint exists; UI minimal |
+| Anomaly alert queue | ⬜ | List recent out-of-range results, ack/dismiss |
+| Disease trend charts (nightly `@Scheduled`) | ⬜ | Aggregate flagged results over time |
+| Login rate limiting | ⬜ | Security §7 |
+| Automated encrypted backups + restore drill | ⬜ | Ops |
+| Perf pass (indexes, slow queries) | ⬜ | |
+
+## Testing & CI
+| Item | Status | Notes |
+|---|---|---|
+| Unit tests (money + medicine logic) | 🟡 | Flagging, patient-age, order-status covered |
+| Integration tests (Testcontainers) | ⬜ | Critical flow: invoice→orders→results→report |
+| API RBAC tests (MockMvc) | ⬜ | Each role reaches only its endpoints |
+| E2E smoke (Playwright) | ⬜ | Money path |
+| GitHub Actions CI (`mvn verify`) | ⬜ | |
+
+---
+
+## Session log
+- **2026-07-18** — Pushed `feature/phase-1-mvp` to remote; updated origin to renamed repo `lab_ms_frontend`. Removed 4 stale scaffold stub files. Started PROGRESS.md.
+- **2026-07-18** — Shipped: patient soft-delete (V3 migration), duplicate-phone warning in POS quick-create, admin merge-duplicates tool (repoints invoices+reports, audited), and the test-catalog admin UI (`/catalog`). All 12 backend tests pass; frontend typechecks clean.
+
+## Next build order
+1. Login rate limiting (Security §7)
+2. MockMvc RBAC tests (each role reaches only its endpoints)
+3. Integration test for the money path (Testcontainers): invoice → orders → results → report
+4. Anomaly alert queue (recent out-of-range results, ack/dismiss)
+5. Email report delivery (consent-gated)

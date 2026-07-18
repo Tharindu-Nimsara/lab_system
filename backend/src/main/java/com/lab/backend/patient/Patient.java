@@ -52,6 +52,10 @@ public class Patient {
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    /** Set when the patient is soft-deleted or merged into another record. */
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
+
     /**
      * Current age derived from DOB on every read, so it advances automatically —
      * a patient registered by age gets dob = today − age, and their age ticks up

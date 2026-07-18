@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Nav from "@/components/Nav";
-import { api, ApiError, Invoice, Patient } from "@/lib/api";
+import { api, ApiError, Invoice, Me, Patient } from "@/lib/api";
 
 interface EditForm {
   name: string;
@@ -27,6 +27,12 @@ export default function PatientDetailPage() {
   const [form, setForm] = useState<EditForm | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const [me, setMe] = useState<Me | null>(null);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeQuery, setMergeQuery] = useState("");
+  const [mergeMatches, setMergeMatches] = useState<Patient[]>([]);
+  const [merging, setMerging] = useState(false);
+
   const load = useCallback(() => {
     api<Patient>(`/patients/${id}`)
       .then(setPatient)
@@ -37,6 +43,46 @@ export default function PatientDetailPage() {
   }, [id]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    api<Me>("/auth/me").then(setMe).catch(() => setMe(null));
+  }, []);
+
+  // Search other patients to merge this record into (exclude self).
+  useEffect(() => {
+    if (mergeQuery.trim().length < 2) {
+      setMergeMatches([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api<Patient[]>(`/patients?search=${encodeURIComponent(mergeQuery.trim())}`)
+        .then((rows) => setMergeMatches(rows.filter((r) => String(r.id) !== id)))
+        .catch(() => setMergeMatches([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [mergeQuery, id]);
+
+  async function mergeInto(target: Patient) {
+    if (!patient) return;
+    const ok = window.confirm(
+      `Merge ${patient.name} (${patient.patientNo}) INTO ${target.name} (${target.patientNo})?\n\n` +
+        `All invoices and reports move to ${target.patientNo}, and ${patient.patientNo} is ` +
+        `soft-deleted. This cannot be undone from the UI.`,
+    );
+    if (!ok) return;
+    setMerging(true);
+    setError("");
+    try {
+      await api<Patient>("/patients/merge", {
+        method: "POST",
+        body: JSON.stringify({ sourceId: patient.id, targetId: target.id }),
+      });
+      window.location.href = `/patients/${target.id}`;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Merge failed");
+      setMerging(false);
+    }
+  }
 
   function startEdit() {
     if (!patient) return;
@@ -302,6 +348,63 @@ export default function PatientDetailPage() {
             </table>
           </div>
         </section>
+
+        {me?.role === "ADMIN" && patient && (
+          <section className="rounded-xl border border-amber-200 bg-white p-5 dark:border-amber-900 dark:bg-gray-900">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold">Merge duplicate</h2>
+                <p className="text-xs text-gray-500">
+                  Combine two records for the same person. This record is merged into the one you
+                  pick.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setMergeOpen((v) => !v);
+                  setMergeQuery("");
+                  setMergeMatches([]);
+                }}
+                className="rounded border border-amber-300 px-3 py-1 text-sm text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-950"
+              >
+                {mergeOpen ? "Cancel" : "Merge…"}
+              </button>
+            </div>
+            {mergeOpen && (
+              <div className="mt-3">
+                <input
+                  autoFocus
+                  placeholder="Search the record to keep (by phone or name)…"
+                  value={mergeQuery}
+                  onChange={(e) => setMergeQuery(e.target.value)}
+                  className={input}
+                />
+                <ul className="mt-2 divide-y divide-gray-100 dark:divide-gray-800">
+                  {mergeMatches.map((m) => (
+                    <li key={m.id} className="flex items-center justify-between py-2 text-sm">
+                      <span>
+                        {m.name}{" "}
+                        <span className="text-gray-400">
+                          ({m.patientNo}) · {m.phone}
+                        </span>
+                      </span>
+                      <button
+                        disabled={merging}
+                        onClick={() => mergeInto(m)}
+                        className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-40"
+                      >
+                        Keep this, merge current in
+                      </button>
+                    </li>
+                  ))}
+                  {mergeQuery.trim().length >= 2 && mergeMatches.length === 0 && (
+                    <li className="py-2 text-sm text-gray-400">No other matching patients</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
       </main>
     </div>
   );
