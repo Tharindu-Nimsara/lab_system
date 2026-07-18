@@ -36,8 +36,14 @@ export default function LoginPage() {
       >
         <h1 className="text-xl font-semibold">Lab System — Sign in</h1>
         <div>
-          <label className="mb-1 block text-sm text-gray-600 dark:text-gray-300">Email</label>
+          <label
+            htmlFor="email"
+            className="mb-1 block text-sm text-gray-600 dark:text-gray-300"
+          >
+            Email
+          </label>
           <input
+            id="email"
             type="email"
             required
             value={email}
@@ -46,8 +52,14 @@ export default function LoginPage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm text-gray-600 dark:text-gray-300">Password</label>
+          <label
+            htmlFor="password"
+            className="mb-1 block text-sm text-gray-600 dark:text-gray-300"
+          >
+            Password
+          </label>
           <input
+            id="password"
             type="password"
             required
             value={password}
