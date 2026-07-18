@@ -45,7 +45,7 @@
 | Expense tracking | ✅ | `FinanceController` + admin UI form |
 | Daily cash-flow / Monthly P&L | ✅ | Admin-only summaries |
 | Dashboard KPIs + revenue charts | ✅ | `AdminController` /stats, 14-day series |
-| Email report delivery (consent-gated) | ⬜ | SES/Resend |
+| Email report delivery (consent-gated) | ✅ | SMTP (Spring Mail); PDF attachment; gated on email+consent; `sent_email_at` tracked |
 | WhatsApp Business API delivery | ⬜ | Apply early — Meta approval slow |
 
 ## Phase 3 — Analytics & Hardening
@@ -74,9 +74,13 @@
 - **2026-07-18** — Shipped: patient soft-delete (V3 migration), duplicate-phone warning in POS quick-create, admin merge-duplicates tool (repoints invoices+reports, audited), and the test-catalog admin UI (`/catalog`). All 12 backend tests pass; frontend typechecks clean.
 - **2026-07-18** — Hardening + tests: login rate limiting (in-memory per IP+email throttle, 429 + `Retry-After`, configurable via `app.login.*`), 8 MockMvc RBAC tests (all role boundaries), and a Testcontainers money-path integration test (real Postgres; `@EnabledIfDockerAvailable` so it skips where Docker is absent). Suite: 24 pass + 1 skipped, `BUILD SUCCESS`.
 - **2026-07-18** — Anomaly alert queue (plan §5.6): V4 migration adds anomaly-review columns to `results`; `/api/anomalies` lists flagged+unreviewed results with patient/test context; acknowledge/dismiss endpoints stamp who/when/what and audit-log it (lab-staff + admin). New `/anomalies` UI page with H/L chips + Nav link. RBAC test extended; integration test now asserts the flag surfaces in the queue and clears on acknowledge.
+- **2026-07-18** — Email report delivery (plan §5.4): `spring-boot-starter-mail` (SMTP, all config env-overridable). `EmailService` sends the finalized report PDF as a MIME attachment; `ReportService.emailReport` gates on finalized + email-on-file + **email consent**, stamps `sent_email_at`, and audits `SEND_EMAIL`. Endpoints `POST /reports/{id}/email` + `GET /reports/config`. Worklist page shows an "Email report" button when mail is enabled. `app.mail.enabled=false` by default so the app boots without SMTP. 3 consent-gate unit tests. Suite: 27 pass + 1 skipped.
+
+## Config to go live with email
+Set `MAIL_ENABLED=true`, `MAIL_HOST`/`MAIL_PORT`, `MAIL_USERNAME`/`MAIL_PASSWORD`, `MAIL_FROM` (e.g. Gmail app-password, or Mailtrap for staging).
 
 ## Next build order
-1. Email report delivery (consent-gated)
-2. Disease trend charts via nightly `@Scheduled` aggregate job
-3. Audit log viewer UI (endpoint already exists)
-4. GitHub Actions CI running `mvn verify`
+1. Disease trend charts via nightly `@Scheduled` aggregate job
+2. Audit log viewer UI (endpoint already exists)
+3. GitHub Actions CI running `mvn verify`
+4. WhatsApp Business API delivery (needs Meta approval — apply early)

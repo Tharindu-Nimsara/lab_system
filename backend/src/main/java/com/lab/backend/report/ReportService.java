@@ -45,6 +45,7 @@ public class ReportService {
     private final PatientRepository patients;
     private final ReportRepository reports;
     private final ReportPdfService pdf;
+    private final EmailService email;
     private final AuditService audit;
     private final CurrentUserService currentUser;
 
@@ -147,6 +148,45 @@ public class ReportService {
         return reports.findByInvoiceId(invoiceId)
                 .map(r -> new ReportStatus(invoiceId, r.getFinalizedAt() != null, r.getFinalizedAt()))
                 .orElse(new ReportStatus(invoiceId, false, null));
+    }
+
+    public record DeliveryStatus(Long invoiceId, OffsetDateTime sentEmailAt) {}
+
+    /**
+     * Email the finalized report to the patient. Gated by (1) a finalized report,
+     * (2) a patient email on file, and (3) email consent captured at registration
+     * (privacy requirement, plan §5.4). Stamps {@code sent_email_at} on success.
+     */
+    @Transactional
+    public DeliveryStatus emailReport(Long invoiceId, String ip) {
+        Report report = reports.findByInvoiceId(invoiceId)
+                .filter(r -> r.getFinalizedAt() != null && r.getPdfPath() != null)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Report is not finalized for invoice " + invoiceId));
+        Patient patient = patients.findById(report.getPatientId())
+                .orElseThrow(() -> new NotFoundException("Patient not found"));
+        if (patient.getEmail() == null || patient.getEmail().isBlank()) {
+            throw new IllegalStateException("Patient has no email address on file");
+        }
+        if (!patient.isConsentEmail()) {
+            throw new IllegalStateException("Patient has not consented to email delivery");
+        }
+        Invoice invoice = invoices.findById(invoiceId)
+                .orElseThrow(() -> new NotFoundException("Invoice not found: " + invoiceId));
+
+        byte[] bytes;
+        try {
+            bytes = Files.readAllBytes(Path.of(report.getPdfPath()));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read report PDF", e);
+        }
+
+        email.sendReport(patient.getEmail(), patient.getName(), invoice.getInvoiceNo(), bytes);
+
+        report.setSentEmailAt(OffsetDateTime.now());
+        reports.save(report);
+        audit.record(currentUser.require().getId(), "SEND_EMAIL", "Report", invoiceId, null, ip);
+        return new DeliveryStatus(invoiceId, report.getSentEmailAt());
     }
 
     public byte[] pdfBytes(Long invoiceId, String ip) {

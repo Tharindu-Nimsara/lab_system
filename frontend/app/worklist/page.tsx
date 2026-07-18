@@ -6,7 +6,9 @@ import {
   api,
   ApiError,
   apiUrl,
+  DeliveryStatus,
   LabTest,
+  MailConfig,
   OrderStatus,
   ResultResponse,
   TemplateField,
@@ -33,6 +35,9 @@ export default function WorklistPage() {
   const [entryOrder, setEntryOrder] = useState<WorklistRow | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [lastResult, setLastResult] = useState<ResultResponse | null>(null);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [emailing, setEmailing] = useState<number | null>(null);
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
@@ -47,6 +52,9 @@ export default function WorklistPage() {
   useEffect(() => {
     api<LabTest[]>("/catalog/tests").then(setTests).catch(() => {});
     api<TestTemplate[]>("/catalog/templates").then(setTemplates).catch(() => {});
+    api<MailConfig>("/reports/config")
+      .then((c) => setEmailEnabled(c.emailEnabled))
+      .catch(() => {});
   }, []);
 
   const fieldsFor = useMemo(() => {
@@ -112,6 +120,23 @@ export default function WorklistPage() {
     }
   }
 
+  async function emailReport(row: WorklistRow) {
+    setError("");
+    setNotice("");
+    setEmailing(row.invoiceId);
+    try {
+      // Finalize first (idempotent) so an un-finalized report can still be sent.
+      await api(`/reports/${row.invoiceId}/finalize`, { method: "POST" });
+      await api<DeliveryStatus>(`/reports/${row.invoiceId}/email`, { method: "POST" });
+      setNotice(`Report ${row.invoiceNo} emailed to ${row.patientName}.`);
+    } catch (e) {
+      // Consent/no-email/disabled all surface as a clear message from the backend.
+      setError(e instanceof ApiError ? e.message : "Failed to email report");
+    } finally {
+      setEmailing(null);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Nav />
@@ -138,6 +163,11 @@ export default function WorklistPage() {
         </div>
 
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+        {notice && (
+          <p className="mb-3 rounded bg-green-50 p-2 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+            {notice}
+          </p>
+        )}
         {lastResult && (
           <p className="mb-3 rounded bg-green-50 p-2 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
             Result saved for order #{lastResult.orderId}
@@ -236,6 +266,15 @@ export default function WorklistPage() {
                         className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                       >
                         Report PDF
+                      </button>
+                    )}
+                    {emailEnabled && (row.status === "COMPLETED" || row.status === "VERIFIED") && (
+                      <button
+                        onClick={() => emailReport(row)}
+                        disabled={emailing === row.invoiceId}
+                        className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:hover:bg-gray-800"
+                      >
+                        {emailing === row.invoiceId ? "Emailing…" : "Email report"}
                       </button>
                     )}
                   </td>

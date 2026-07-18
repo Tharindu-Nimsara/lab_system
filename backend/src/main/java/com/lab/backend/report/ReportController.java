@@ -14,10 +14,26 @@ public class ReportController {
 
     private final ReportService service;
 
+    private final EmailService email;
+
     @PostMapping("/{invoiceId}/finalize")
     @PreAuthorize("hasAnyRole('ADMIN', 'LAB_STAFF')")
     public ReportService.ReportStatus finalize(@PathVariable Long invoiceId, HttpServletRequest http) {
         return service.finalize(invoiceId, http.getRemoteAddr());
+    }
+
+    /** Email the finalized report to the patient (consent-gated in the service). */
+    @PostMapping("/{invoiceId}/email")
+    public ReportService.DeliveryStatus emailReport(@PathVariable Long invoiceId, HttpServletRequest http) {
+        return service.emailReport(invoiceId, http.getRemoteAddr());
+    }
+
+    public record MailConfig(boolean emailEnabled) {}
+
+    /** Whether email delivery is usable in this environment (drives the UI button). */
+    @GetMapping("/config")
+    public MailConfig config() {
+        return new MailConfig(email.isEnabled());
     }
 
     @GetMapping("/{invoiceId}")

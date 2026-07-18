@@ -15,6 +15,17 @@ spring:
     jdbc:
       initialize-schema: always
     timeout: 8h
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
 
 server:
   port: 4000
@@ -31,6 +42,11 @@ app:
     phone: ${LAB_PHONE:011-1234567}
   storage:
     reports-dir: ${REPORTS_DIR:./storage/reports}
+  mail:
+    # Off by default so the app boots without a real SMTP server; set true in
+    # environments with mail configured. When false, the send endpoint 400s.
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:no-reply@medical-lab.local}
   login:
     max-attempts: ${LOGIN_MAX_ATTEMPTS:5}       # failures per window before a block
     window-seconds: ${LOGIN_WINDOW_SECONDS:300}  # rolling window for counting failures

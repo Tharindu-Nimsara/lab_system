@@ -161,6 +161,15 @@ export interface ResultResponse {
   flags: Record<string, "H" | "L">;
 }
 
+export interface DeliveryStatus {
+  invoiceId: number;
+  sentEmailAt: string | null;
+}
+
+export interface MailConfig {
+  emailEnabled: boolean;
+}
+
 export interface AnomalyItem {
   resultId: number;
   orderId: number;
