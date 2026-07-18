@@ -65,7 +65,7 @@
 | Integration tests (Testcontainers) | ✅ | Money path: invoice→orders→results→report; skips w/o Docker |
 | API RBAC tests (MockMvc) | ✅ | 8 tests: each role reaches only its endpoints |
 | E2E smoke (Playwright) | ⬜ | Money path |
-| GitHub Actions CI (`mvn verify`) | ⬜ | |
+| GitHub Actions CI (`mvn verify`) | ✅ | `.github/workflows/ci.yml`: backend verify (Postgres service + Testcontainers) + frontend typecheck/build |
 
 ---
 
