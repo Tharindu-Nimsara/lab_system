@@ -1,0 +1,6 @@
+.idea/
+.vscode/
+.playwright-mcp/
+.dist/
+node_modules/
+target/
