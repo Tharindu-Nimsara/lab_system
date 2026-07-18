@@ -12,6 +12,7 @@ const LINKS: { href: string; label: string; roles: string[] }[] = [
   { href: "/anomalies", label: "Anomalies", roles: ["ADMIN", "LAB_STAFF"] },
   { href: "/catalog", label: "Catalog", roles: ["ADMIN"] },
   { href: "/admin", label: "Dashboard", roles: ["ADMIN"] },
+  { href: "/audit", label: "Audit", roles: ["ADMIN"] },
 ];
 
 export default function Nav() {

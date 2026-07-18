@@ -51,7 +51,7 @@
 ## Phase 3 — Analytics & Hardening
 | Item | Status | Notes |
 |---|---|---|
-| Audit log viewer | 🟡 | `/audit` endpoint exists; UI minimal |
+| Audit log viewer | ✅ | `/audit` page: last 100 actions, filter by action + free-text search |
 | Anomaly alert queue | ✅ | `/anomalies` queue of flagged results; acknowledge/dismiss, audited |
 | Disease trend charts (nightly `@Scheduled`) | ✅ | V5 `disease_trends`; nightly job + on-demand refresh; abnormal-rate heat table on dashboard |
 | Login rate limiting | ✅ | In-memory throttle per IP+email; 429 + Retry-After; configurable |
