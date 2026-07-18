@@ -44,6 +44,8 @@ public class SecurityConfig {
                   .hasAnyRole("ADMIN", "LAB_STAFF")
               .requestMatchers("/api/invoices/**", "/api/patients/**")
                   .hasAnyRole("ADMIN", "RECEPTIONIST")
+              .requestMatchers("/api/reports/**")
+                  .hasAnyRole("ADMIN", "RECEPTIONIST", "LAB_STAFF")
               .anyRequest().authenticated())
           .exceptionHandling(ex -> ex
               .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))

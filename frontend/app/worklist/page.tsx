@@ -5,6 +5,7 @@ import Nav from "@/components/Nav";
 import {
   api,
   ApiError,
+  apiUrl,
   LabTest,
   OrderStatus,
   ResultResponse,
@@ -98,6 +99,16 @@ export default function WorklistPage() {
       load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to verify");
+    }
+  }
+
+  async function report(row: WorklistRow) {
+    setError("");
+    try {
+      await api(`/reports/${row.invoiceId}/finalize`, { method: "POST" });
+      window.open(apiUrl(`/reports/${row.invoiceId}/pdf`), "_blank");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Failed to finalize report");
     }
   }
 
@@ -217,6 +228,14 @@ export default function WorklistPage() {
                         className="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700"
                       >
                         Verify
+                      </button>
+                    )}
+                    {(row.status === "COMPLETED" || row.status === "VERIFIED") && (
+                      <button
+                        onClick={() => report(row)}
+                        className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                      >
+                        Report PDF
                       </button>
                     )}
                   </td>

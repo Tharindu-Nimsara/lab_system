@@ -20,6 +20,7 @@ public interface OrderRepository extends JpaRepository<LabOrder, Long> {
         String getTestName();
         String getPatientNo();
         String getPatientName();
+        Long getInvoiceId();
         String getInvoiceNo();
         Instant getBilledAt();
         Instant getSampleCollectedAt();
@@ -32,6 +33,7 @@ public interface OrderRepository extends JpaRepository<LabOrder, Long> {
                t.name                AS testName,
                p.patient_no          AS patientNo,
                p.name                AS patientName,
+               i.id                  AS invoiceId,
                i.invoice_no          AS invoiceNo,
                i.created_at          AS billedAt,
                o.sample_collected_at AS sampleCollectedAt

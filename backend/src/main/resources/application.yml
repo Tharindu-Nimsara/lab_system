@@ -24,6 +24,14 @@ server:
         http-only: true
         same-site: lax
 
+app:
+  lab:
+    name: ${LAB_NAME:Medical Laboratory}
+    address: ${LAB_ADDRESS:123 Main Street, Colombo}
+    phone: ${LAB_PHONE:011-1234567}
+  storage:
+    reports-dir: ${REPORTS_DIR:./storage/reports}
+
 management:
   endpoints:
     web:

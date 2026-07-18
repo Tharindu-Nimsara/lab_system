@@ -9,6 +9,7 @@ const LINKS: { href: string; label: string; roles: string[] }[] = [
   { href: "/pos", label: "POS", roles: ["ADMIN", "RECEPTIONIST"] },
   { href: "/patients", label: "Patients", roles: ["ADMIN", "RECEPTIONIST"] },
   { href: "/worklist", label: "Worklist", roles: ["ADMIN", "LAB_STAFF"] },
+  { href: "/admin", label: "Dashboard", roles: ["ADMIN"] },
 ];
 
 export default function Nav() {

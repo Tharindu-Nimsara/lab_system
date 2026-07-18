@@ -5,6 +5,7 @@ import Nav from "@/components/Nav";
 import {
   api,
   ApiError,
+  apiUrl,
   InvoiceDetail,
   LabTest,
   Patient,
@@ -307,11 +308,21 @@ export default function PosPage() {
                 {saving ? "Saving…" : "Save invoice"}
               </button>
               {lastInvoice && (
-                <p className="rounded bg-green-50 p-2 text-green-700 dark:bg-green-950 dark:text-green-300">
-                  Saved {lastInvoice.invoice.invoiceNo} — total{" "}
-                  {Number(lastInvoice.invoice.total).toFixed(2)} ({lastInvoice.items.length} test
-                  {lastInvoice.items.length === 1 ? "" : "s"})
-                </p>
+                <div className="rounded bg-green-50 p-2 text-green-700 dark:bg-green-950 dark:text-green-300">
+                  <p>
+                    Saved {lastInvoice.invoice.invoiceNo} — total{" "}
+                    {Number(lastInvoice.invoice.total).toFixed(2)} ({lastInvoice.items.length} test
+                    {lastInvoice.items.length === 1 ? "" : "s"})
+                  </p>
+                  <button
+                    onClick={() =>
+                      window.open(apiUrl(`/invoices/${lastInvoice.invoice.id}/pdf`), "_blank")
+                    }
+                    className="mt-1 rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
+                  >
+                    Print bill (2 copies)
+                  </button>
+                </div>
               )}
             </div>
           </div>

@@ -1,7 +1,13 @@
 package com.lab.backend.billing;
 
+import com.lab.backend.common.NotFoundException;
+import com.lab.backend.patient.Patient;
+import com.lab.backend.patient.PatientRepository;
+import com.lab.backend.report.BillPdfService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -19,6 +25,8 @@ import java.util.List;
 public class BillingController {
 
     private final BillingService service;
+    private final BillPdfService billPdf;
+    private final PatientRepository patients;
 
     public record CreateInvoiceRequest(@NotNull Long patientId,
                                        @NotEmpty List<Long> testIds,
@@ -39,6 +47,18 @@ public class BillingController {
     @GetMapping
     public List<Invoice> forPatient(@RequestParam Long patientId) {
         return service.forPatient(patientId);
+    }
+
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> pdf(@PathVariable Long id) {
+        BillingService.InvoiceDetail detail = service.get(id);
+        Patient patient = patients.findById(detail.invoice().getPatientId())
+                .orElseThrow(() -> new NotFoundException("Patient not found"));
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header("Content-Disposition",
+                        "inline; filename=" + detail.invoice().getInvoiceNo() + ".pdf")
+                .body(billPdf.render(detail, patient));
     }
 
     @PostMapping("/{id}/void")

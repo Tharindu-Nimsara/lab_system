@@ -1,5 +1,10 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+/** Absolute URL for opening API resources (PDFs) in a new tab. */
+export function apiUrl(path: string): string {
+  return `${API_BASE}/api${path}`;
+}
+
 function getCsrf(): string {
   if (typeof document === "undefined") return "";
   return document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? "";
@@ -140,6 +145,7 @@ export interface WorklistRow {
   testName: string;
   patientNo: string;
   patientName: string;
+  invoiceId: number;
   invoiceNo: string;
   billedAt: string;
   sampleCollectedAt?: string;
