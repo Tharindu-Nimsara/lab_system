@@ -15,6 +15,7 @@ public class ReportController {
     private final ReportService service;
 
     private final EmailService email;
+    private final WhatsAppService whatsapp;
 
     @PostMapping("/{invoiceId}/finalize")
     @PreAuthorize("hasAnyRole('ADMIN', 'LAB_STAFF')")
@@ -28,12 +29,18 @@ public class ReportController {
         return service.emailReport(invoiceId, http.getRemoteAddr());
     }
 
-    public record MailConfig(boolean emailEnabled) {}
+    /** WhatsApp the finalized report to the patient (consent-gated in the service). */
+    @PostMapping("/{invoiceId}/whatsapp")
+    public ReportService.DeliveryStatus whatsappReport(@PathVariable Long invoiceId, HttpServletRequest http) {
+        return service.whatsappReport(invoiceId, http.getRemoteAddr());
+    }
 
-    /** Whether email delivery is usable in this environment (drives the UI button). */
+    public record DeliveryConfig(boolean emailEnabled, boolean whatsappEnabled) {}
+
+    /** Which delivery channels are usable in this environment (drives the UI buttons). */
     @GetMapping("/config")
-    public MailConfig config() {
-        return new MailConfig(email.isEnabled());
+    public DeliveryConfig config() {
+        return new DeliveryConfig(email.isEnabled(), whatsapp.isEnabled());
     }
 
     @GetMapping("/{invoiceId}")

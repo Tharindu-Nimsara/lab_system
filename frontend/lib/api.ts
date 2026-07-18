@@ -164,10 +164,12 @@ export interface ResultResponse {
 export interface DeliveryStatus {
   invoiceId: number;
   sentEmailAt: string | null;
+  sentWhatsappAt: string | null;
 }
 
-export interface MailConfig {
+export interface DeliveryConfig {
   emailEnabled: boolean;
+  whatsappEnabled: boolean;
 }
 
 export interface AnomalyItem {

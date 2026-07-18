@@ -36,6 +36,7 @@ class ReportEmailConsentTest {
     @Mock PatientRepository patients;
     @Mock ReportRepository reports;
     @Mock EmailService email;
+    @Mock WhatsAppService whatsapp;
     @Mock AuditService audit;
     @Mock CurrentUserService currentUser;
 
@@ -55,6 +56,14 @@ class ReportEmailConsentTest {
         p.setName("Jane Doe");
         p.setEmail(email);
         p.setConsentEmail(consent);
+        return p;
+    }
+
+    private Patient whatsappPatient(String phone, boolean consent) {
+        Patient p = new Patient();
+        p.setName("Jane Doe");
+        p.setPhone(phone);
+        p.setConsentWhatsapp(consent);
         return p;
     }
 
@@ -101,5 +110,35 @@ class ReportEmailConsentTest {
         verify(reports).save(argThat(r -> r.getSentEmailAt() != null));
         verify(audit).record(eq(99L), eq("SEND_EMAIL"), eq("Report"), eq(10L), any(), eq("ip"));
         assertThat(status.sentEmailAt()).isNotNull();
+    }
+
+    // --- WhatsApp channel: same consent discipline ---
+
+    @Test
+    void whatsappRejectsWhenNoConsent() {
+        when(patients.findById(5L)).thenReturn(Optional.of(whatsappPatient("0770000000", false)));
+
+        assertThatThrownBy(() -> service.whatsappReport(10L, "ip"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("consent");
+        verifyNoInteractions(whatsapp);
+    }
+
+    @Test
+    void whatsappSendsAndStampsWhenPhoneAndConsentPresent() {
+        when(patients.findById(5L)).thenReturn(Optional.of(whatsappPatient("0770000000", true)));
+        Invoice invoice = new Invoice();
+        invoice.setInvoiceNo("INV-1");
+        when(invoices.findById(10L)).thenReturn(Optional.of(invoice));
+        AppUser user = new AppUser();
+        user.setId(99L);
+        when(currentUser.require()).thenReturn(user);
+
+        var status = service.whatsappReport(10L, "ip");
+
+        verify(whatsapp).sendReport(eq("0770000000"), eq("Jane Doe"), eq("INV-1"), any());
+        verify(reports).save(argThat(r -> r.getSentWhatsappAt() != null));
+        verify(audit).record(eq(99L), eq("SEND_WHATSAPP"), eq("Report"), eq(10L), any(), eq("ip"));
+        assertThat(status.sentWhatsappAt()).isNotNull();
     }
 }

@@ -6,9 +6,9 @@ import {
   api,
   ApiError,
   apiUrl,
+  DeliveryConfig,
   DeliveryStatus,
   LabTest,
-  MailConfig,
   OrderStatus,
   ResultResponse,
   TemplateField,
@@ -36,7 +36,9 @@ export default function WorklistPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [lastResult, setLastResult] = useState<ResultResponse | null>(null);
   const [emailEnabled, setEmailEnabled] = useState(false);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [emailing, setEmailing] = useState<number | null>(null);
+  const [whatsapping, setWhatsapping] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -52,8 +54,11 @@ export default function WorklistPage() {
   useEffect(() => {
     api<LabTest[]>("/catalog/tests").then(setTests).catch(() => {});
     api<TestTemplate[]>("/catalog/templates").then(setTemplates).catch(() => {});
-    api<MailConfig>("/reports/config")
-      .then((c) => setEmailEnabled(c.emailEnabled))
+    api<DeliveryConfig>("/reports/config")
+      .then((c) => {
+        setEmailEnabled(c.emailEnabled);
+        setWhatsappEnabled(c.whatsappEnabled);
+      })
       .catch(() => {});
   }, []);
 
@@ -134,6 +139,21 @@ export default function WorklistPage() {
       setError(e instanceof ApiError ? e.message : "Failed to email report");
     } finally {
       setEmailing(null);
+    }
+  }
+
+  async function whatsappReport(row: WorklistRow) {
+    setError("");
+    setNotice("");
+    setWhatsapping(row.invoiceId);
+    try {
+      await api(`/reports/${row.invoiceId}/finalize`, { method: "POST" });
+      await api<DeliveryStatus>(`/reports/${row.invoiceId}/whatsapp`, { method: "POST" });
+      setNotice(`Report ${row.invoiceNo} sent to ${row.patientName} on WhatsApp.`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Failed to send WhatsApp report");
+    } finally {
+      setWhatsapping(null);
     }
   }
 
@@ -275,6 +295,15 @@ export default function WorklistPage() {
                         className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:hover:bg-gray-800"
                       >
                         {emailing === row.invoiceId ? "Emailing…" : "Email report"}
+                      </button>
+                    )}
+                    {whatsappEnabled && (row.status === "COMPLETED" || row.status === "VERIFIED") && (
+                      <button
+                        onClick={() => whatsappReport(row)}
+                        disabled={whatsapping === row.invoiceId}
+                        className="rounded border border-green-300 px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40 dark:border-green-800 dark:text-green-300 dark:hover:bg-green-950"
+                      >
+                        {whatsapping === row.invoiceId ? "Sending…" : "WhatsApp"}
                       </button>
                     )}
                   </td>

@@ -46,7 +46,7 @@
 | Daily cash-flow / Monthly P&L | ✅ | Admin-only summaries |
 | Dashboard KPIs + revenue charts | ✅ | `AdminController` /stats, 14-day series |
 | Email report delivery (consent-gated) | ✅ | SMTP (Spring Mail); PDF attachment; gated on email+consent; `sent_email_at` tracked |
-| WhatsApp Business API delivery | ⬜ | Apply early — Meta approval slow |
+| WhatsApp Business API delivery | 🟡 | Code done (config-gated, consent-gated, `sent_whatsapp_at`); needs Meta account/creds to enable — see MANUAL_TASKS.md |
 
 ## Phase 3 — Analytics & Hardening
 | Item | Status | Notes |

@@ -47,6 +47,15 @@ app:
     # environments with mail configured. When false, the send endpoint 400s.
     enabled: ${MAIL_ENABLED:false}
     from: ${MAIL_FROM:no-reply@medical-lab.local}
+  whatsapp:
+    # Off by default; needs a Meta WhatsApp Business Cloud API app (see MANUAL_TASKS.md).
+    enabled: ${WHATSAPP_ENABLED:false}
+    api-base: ${WHATSAPP_API_BASE:https://graph.facebook.com/v21.0}
+    phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
+    access-token: ${WHATSAPP_ACCESS_TOKEN:}
+    default-country-code: ${WHATSAPP_DEFAULT_CC:94}   # Sri Lanka; used to normalize local numbers
+  analytics:
+    disease-trend-cron: ${DISEASE_TREND_CRON:0 30 2 * * *}
   login:
     max-attempts: ${LOGIN_MAX_ATTEMPTS:5}       # failures per window before a block
     window-seconds: ${LOGIN_WINDOW_SECONDS:300}  # rolling window for counting failures

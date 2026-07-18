@@ -46,6 +46,7 @@ public class ReportService {
     private final ReportRepository reports;
     private final ReportPdfService pdf;
     private final EmailService email;
+    private final WhatsAppService whatsapp;
     private final AuditService audit;
     private final CurrentUserService currentUser;
 
@@ -150,7 +151,8 @@ public class ReportService {
                 .orElse(new ReportStatus(invoiceId, false, null));
     }
 
-    public record DeliveryStatus(Long invoiceId, OffsetDateTime sentEmailAt) {}
+    public record DeliveryStatus(Long invoiceId, OffsetDateTime sentEmailAt,
+                                 OffsetDateTime sentWhatsappAt) {}
 
     /**
      * Email the finalized report to the patient. Gated by (1) a finalized report,
@@ -159,34 +161,76 @@ public class ReportService {
      */
     @Transactional
     public DeliveryStatus emailReport(Long invoiceId, String ip) {
-        Report report = reports.findByInvoiceId(invoiceId)
-                .filter(r -> r.getFinalizedAt() != null && r.getPdfPath() != null)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Report is not finalized for invoice " + invoiceId));
-        Patient patient = patients.findById(report.getPatientId())
-                .orElseThrow(() -> new NotFoundException("Patient not found"));
+        Report report = finalizedReport(invoiceId);
+        Patient patient = requirePatient(report);
         if (patient.getEmail() == null || patient.getEmail().isBlank()) {
             throw new IllegalStateException("Patient has no email address on file");
         }
         if (!patient.isConsentEmail()) {
             throw new IllegalStateException("Patient has not consented to email delivery");
         }
-        Invoice invoice = invoices.findById(invoiceId)
-                .orElseThrow(() -> new NotFoundException("Invoice not found: " + invoiceId));
-
-        byte[] bytes;
-        try {
-            bytes = Files.readAllBytes(Path.of(report.getPdfPath()));
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read report PDF", e);
-        }
-
-        email.sendReport(patient.getEmail(), patient.getName(), invoice.getInvoiceNo(), bytes);
+        Invoice invoice = requireInvoice(invoiceId);
+        email.sendReport(patient.getEmail(), patient.getName(), invoice.getInvoiceNo(),
+                readPdf(report));
 
         report.setSentEmailAt(OffsetDateTime.now());
         reports.save(report);
         audit.record(currentUser.require().getId(), "SEND_EMAIL", "Report", invoiceId, null, ip);
-        return new DeliveryStatus(invoiceId, report.getSentEmailAt());
+        return delivery(invoiceId, report);
+    }
+
+    /**
+     * Send the finalized report over WhatsApp. Gated by (1) a finalized report,
+     * (2) a patient phone on file, and (3) WhatsApp consent. Stamps
+     * {@code sent_whatsapp_at} on success.
+     */
+    @Transactional
+    public DeliveryStatus whatsappReport(Long invoiceId, String ip) {
+        Report report = finalizedReport(invoiceId);
+        Patient patient = requirePatient(report);
+        if (patient.getPhone() == null || patient.getPhone().isBlank()) {
+            throw new IllegalStateException("Patient has no phone number on file");
+        }
+        if (!patient.isConsentWhatsapp()) {
+            throw new IllegalStateException("Patient has not consented to WhatsApp delivery");
+        }
+        Invoice invoice = requireInvoice(invoiceId);
+        whatsapp.sendReport(patient.getPhone(), patient.getName(), invoice.getInvoiceNo(),
+                readPdf(report));
+
+        report.setSentWhatsappAt(OffsetDateTime.now());
+        reports.save(report);
+        audit.record(currentUser.require().getId(), "SEND_WHATSAPP", "Report", invoiceId, null, ip);
+        return delivery(invoiceId, report);
+    }
+
+    private Report finalizedReport(Long invoiceId) {
+        return reports.findByInvoiceId(invoiceId)
+                .filter(r -> r.getFinalizedAt() != null && r.getPdfPath() != null)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Report is not finalized for invoice " + invoiceId));
+    }
+
+    private Patient requirePatient(Report report) {
+        return patients.findById(report.getPatientId())
+                .orElseThrow(() -> new NotFoundException("Patient not found"));
+    }
+
+    private Invoice requireInvoice(Long invoiceId) {
+        return invoices.findById(invoiceId)
+                .orElseThrow(() -> new NotFoundException("Invoice not found: " + invoiceId));
+    }
+
+    private byte[] readPdf(Report report) {
+        try {
+            return Files.readAllBytes(Path.of(report.getPdfPath()));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read report PDF", e);
+        }
+    }
+
+    private DeliveryStatus delivery(Long invoiceId, Report report) {
+        return new DeliveryStatus(invoiceId, report.getSentEmailAt(), report.getSentWhatsappAt());
     }
 
     public byte[] pdfBytes(Long invoiceId, String ip) {
