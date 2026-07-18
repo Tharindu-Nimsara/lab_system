@@ -1,4 +1,5 @@
 .idea/
+.git-stub-backup/
 .vscode/
 .playwright-mcp/
 .dist/
