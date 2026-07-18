@@ -59,16 +59,18 @@ class RbacSecurityTest {
     void receptionistReachesPatientsNotLabOrAdmin() throws Exception {
         assertNotAuthRejected("/api/patients?search=x");
         assertForbidden("/api/results/anything");
+        assertForbidden("/api/anomalies");
         assertForbidden("/api/admin/stats");
         assertForbidden("/api/finance/summary/daily");
     }
 
-    // ---- Lab staff: worklist/results, NOT patients/finance/admin ----
+    // ---- Lab staff: worklist/results/anomalies, NOT patients/finance/admin ----
 
     @Test
     @WithMockUser(roles = "LAB_STAFF")
-    void labStaffReachesResultsNotPatientsOrAdmin() throws Exception {
+    void labStaffReachesResultsAndAnomaliesNotPatientsOrAdmin() throws Exception {
         assertNotAuthRejected("/api/results/anything");
+        assertNotAuthRejected("/api/anomalies");
         assertForbidden("/api/patients?search=x");
         assertForbidden("/api/admin/stats");
         assertForbidden("/api/finance/summary/daily");

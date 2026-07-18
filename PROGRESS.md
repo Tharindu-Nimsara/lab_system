@@ -52,7 +52,7 @@
 | Item | Status | Notes |
 |---|---|---|
 | Audit log viewer | 🟡 | `/audit` endpoint exists; UI minimal |
-| Anomaly alert queue | ⬜ | List recent out-of-range results, ack/dismiss |
+| Anomaly alert queue | ✅ | `/anomalies` queue of flagged results; acknowledge/dismiss, audited |
 | Disease trend charts (nightly `@Scheduled`) | ⬜ | Aggregate flagged results over time |
 | Login rate limiting | ✅ | In-memory throttle per IP+email; 429 + Retry-After; configurable |
 | Automated encrypted backups + restore drill | ⬜ | Ops |
@@ -73,10 +73,10 @@
 - **2026-07-18** — Pushed `feature/phase-1-mvp` to remote; updated origin to renamed repo `lab_ms_frontend`. Removed 4 stale scaffold stub files. Started PROGRESS.md.
 - **2026-07-18** — Shipped: patient soft-delete (V3 migration), duplicate-phone warning in POS quick-create, admin merge-duplicates tool (repoints invoices+reports, audited), and the test-catalog admin UI (`/catalog`). All 12 backend tests pass; frontend typechecks clean.
 - **2026-07-18** — Hardening + tests: login rate limiting (in-memory per IP+email throttle, 429 + `Retry-After`, configurable via `app.login.*`), 8 MockMvc RBAC tests (all role boundaries), and a Testcontainers money-path integration test (real Postgres; `@EnabledIfDockerAvailable` so it skips where Docker is absent). Suite: 24 pass + 1 skipped, `BUILD SUCCESS`.
+- **2026-07-18** — Anomaly alert queue (plan §5.6): V4 migration adds anomaly-review columns to `results`; `/api/anomalies` lists flagged+unreviewed results with patient/test context; acknowledge/dismiss endpoints stamp who/when/what and audit-log it (lab-staff + admin). New `/anomalies` UI page with H/L chips + Nav link. RBAC test extended; integration test now asserts the flag surfaces in the queue and clears on acknowledge.
 
 ## Next build order
-1. Anomaly alert queue (recent out-of-range results, ack/dismiss)
-2. Email report delivery (consent-gated)
-3. Disease trend charts via nightly `@Scheduled` aggregate job
-4. Audit log viewer UI (endpoint already exists)
-5. GitHub Actions CI running `mvn verify`
+1. Email report delivery (consent-gated)
+2. Disease trend charts via nightly `@Scheduled` aggregate job
+3. Audit log viewer UI (endpoint already exists)
+4. GitHub Actions CI running `mvn verify`

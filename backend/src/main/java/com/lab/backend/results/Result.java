@@ -33,4 +33,16 @@ public class Result {
 
     @Column(name = "entered_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime enteredAt;
+
+    // --- Anomaly review (plan §5.6): set when a flagged result is acted on ---
+
+    @Column(name = "anomaly_reviewed_at")
+    private OffsetDateTime anomalyReviewedAt;
+
+    @Column(name = "anomaly_reviewed_by")
+    private Long anomalyReviewedBy;
+
+    /** ACKNOWLEDGED or DISMISSED once reviewed; null while open in the queue. */
+    @Column(name = "anomaly_action")
+    private String anomalyAction;
 }

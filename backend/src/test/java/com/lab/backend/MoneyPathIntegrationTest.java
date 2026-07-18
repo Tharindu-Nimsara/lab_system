@@ -11,6 +11,7 @@ import com.lab.backend.patient.Patient;
 import com.lab.backend.patient.PatientController;
 import com.lab.backend.patient.PatientService;
 import com.lab.backend.report.ReportService;
+import com.lab.backend.results.AnomalyService;
 import com.lab.backend.results.WorklistService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,7 @@ class MoneyPathIntegrationTest {
     @Autowired BillingService billing;
     @Autowired WorklistService worklist;
     @Autowired ReportService reports;
+    @Autowired AnomalyService anomalies;
     @Autowired LabTestRepository tests;
     @Autowired OrderRepository orders;
 
@@ -85,6 +87,13 @@ class MoneyPathIntegrationTest {
         // Glucose 130 is above the 100 upper bound → server flags it High.
         assertThat(result.flags().get("glucose").asString()).isEqualTo("H");
         assertThat(result.status()).isEqualTo(OrderStatus.COMPLETED);
+
+        // 3b. The flagged result surfaces in the anomaly queue, then leaves it once acknowledged.
+        assertThat(anomalies.queue())
+                .anyMatch(a -> a.orderId().equals(orderId) && "FBS".equals(a.testCode()));
+        anomalies.acknowledge(orderId, "127.0.0.1");
+        assertThat(anomalies.queue())
+                .noneMatch(a -> a.orderId().equals(orderId));
 
         // 4. Finalize the report — the gate passes now that results are COMPLETED.
         var status = reports.finalize(detail.invoice().getId(), "127.0.0.1");

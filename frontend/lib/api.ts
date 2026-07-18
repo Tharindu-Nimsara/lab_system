@@ -160,3 +160,15 @@ export interface ResultResponse {
   values: Record<string, number>;
   flags: Record<string, "H" | "L">;
 }
+
+export interface AnomalyItem {
+  resultId: number;
+  orderId: number;
+  testCode: string;
+  testName: string;
+  patientNo: string;
+  patientName: string;
+  values: Record<string, number>;
+  flags: Record<string, "H" | "L">;
+  enteredAt: string;
+}
