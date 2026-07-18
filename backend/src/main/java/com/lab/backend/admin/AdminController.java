@@ -1,9 +1,12 @@
 package com.lab.backend.admin;
 
+import com.lab.backend.analytics.DiseaseTrendService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -17,6 +20,7 @@ import java.util.Map;
 public class AdminController {
 
     private final JdbcClient jdbc;
+    private final DiseaseTrendService diseaseTrends;
 
     public record DayPoint(LocalDate day, long patients, BigDecimal revenue) {}
 
@@ -80,5 +84,19 @@ public class AdminController {
                 FROM audit_logs a JOIN users u ON u.id = a.user_id
                 ORDER BY a.id DESC LIMIT 100
                 """).query().listOfRows();
+    }
+
+    /** Precomputed disease-trend buckets for the last N months (default 12). */
+    @GetMapping("/disease-trends")
+    public List<DiseaseTrendService.TrendPoint> diseaseTrends(
+            @RequestParam(name = "months", defaultValue = "12") int months) {
+        return diseaseTrends.recent(months);
+    }
+
+    /** Recompute the aggregate on demand (otherwise runs nightly). */
+    @PostMapping("/disease-trends/refresh")
+    public Map<String, Object> refreshDiseaseTrends() {
+        int rows = diseaseTrends.refresh();
+        return Map.of("buckets", rows);
     }
 }

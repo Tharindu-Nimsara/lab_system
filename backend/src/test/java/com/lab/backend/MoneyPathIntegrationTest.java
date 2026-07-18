@@ -10,6 +10,7 @@ import com.lab.backend.common.Json;
 import com.lab.backend.patient.Patient;
 import com.lab.backend.patient.PatientController;
 import com.lab.backend.patient.PatientService;
+import com.lab.backend.analytics.DiseaseTrendService;
 import com.lab.backend.report.ReportService;
 import com.lab.backend.results.AnomalyService;
 import com.lab.backend.results.WorklistService;
@@ -53,6 +54,7 @@ class MoneyPathIntegrationTest {
     @Autowired WorklistService worklist;
     @Autowired ReportService reports;
     @Autowired AnomalyService anomalies;
+    @Autowired DiseaseTrendService diseaseTrends;
     @Autowired LabTestRepository tests;
     @Autowired OrderRepository orders;
 
@@ -94,6 +96,12 @@ class MoneyPathIntegrationTest {
         anomalies.acknowledge(orderId, "127.0.0.1");
         assertThat(anomalies.queue())
                 .noneMatch(a -> a.orderId().equals(orderId));
+
+        // 3c. The disease-trend aggregate picks up this flagged FBS result.
+        diseaseTrends.refresh();
+        assertThat(diseaseTrends.recent(1))
+                .anyMatch(p -> "FBS".equals(p.testCode()) && p.abnormalCount() >= 1
+                        && p.totalTests() >= 1);
 
         // 4. Finalize the report — the gate passes now that results are COMPLETED.
         var status = reports.finalize(detail.invoice().getId(), "127.0.0.1");

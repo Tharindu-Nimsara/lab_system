@@ -29,6 +29,14 @@ interface Summary {
   net: number;
 }
 
+interface TrendPoint {
+  testCode: string;
+  testName: string;
+  month: string;
+  totalTests: number;
+  abnormalCount: number;
+}
+
 const EXPENSE_CATEGORIES = ["SALARY", "KITS", "EQUIPMENT", "UTILITY", "OTHER"];
 
 function Tile({ label, value }: { label: string; value: string }) {
@@ -58,6 +66,8 @@ function MoneyRows({ rows }: { rows: Record<string, number> }) {
 export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [monthly, setMonthly] = useState<Summary | null>(null);
+  const [trends, setTrends] = useState<TrendPoint[]>([]);
+  const [refreshingTrends, setRefreshingTrends] = useState(false);
   const [error, setError] = useState("");
   const [expense, setExpense] = useState({
     category: "KITS",
@@ -71,9 +81,35 @@ export default function AdminPage() {
     api<Summary>(`/finance/monthly?month=${new Date().toISOString().slice(0, 7)}`)
       .then(setMonthly)
       .catch(() => {});
+    api<TrendPoint[]>("/admin/disease-trends?months=6").then(setTrends).catch(() => {});
   }, []);
 
   useEffect(load, [load]);
+
+  async function refreshTrends() {
+    setRefreshingTrends(true);
+    setError("");
+    try {
+      await api("/admin/disease-trends/refresh", { method: "POST" });
+      const fresh = await api<TrendPoint[]>("/admin/disease-trends?months=6");
+      setTrends(fresh);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to refresh trends");
+    } finally {
+      setRefreshingTrends(false);
+    }
+  }
+
+  // Group trend points into { month → {testCode → abnormal %} } for a small table/heat view.
+  const trendMonths = Array.from(new Set(trends.map((t) => t.month))).sort();
+  const trendTests = Array.from(
+    new Map(trends.map((t) => [t.testCode, t.testName])).entries(),
+  );
+  const abnormalPct = (testCode: string, month: string): number | null => {
+    const p = trends.find((t) => t.testCode === testCode && t.month === month);
+    if (!p || p.totalTests === 0) return null;
+    return Math.round((p.abnormalCount / p.totalTests) * 100);
+  };
 
   async function addExpense(e: React.FormEvent) {
     e.preventDefault();
@@ -132,6 +168,76 @@ export default function AdminPage() {
               </span>
             ))}
           </div>
+        </section>
+
+        <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold">Disease trends — abnormal result rate</h2>
+              <p className="text-xs text-gray-500">
+                Share of results flagged out-of-range per test, by month. Aggregate statistics,
+                not diagnosis. Recomputed nightly.
+              </p>
+            </div>
+            <button
+              onClick={refreshTrends}
+              disabled={refreshingTrends}
+              className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 disabled:opacity-40 dark:border-gray-700 dark:hover:bg-gray-800"
+            >
+              {refreshingTrends ? "Refreshing…" : "Refresh now"}
+            </button>
+          </div>
+          {trends.length === 0 ? (
+            <p className="text-sm text-gray-400">
+              No trend data yet — enter some results, then refresh (or wait for the nightly job).
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500">
+                    <th className="px-2 py-1">Test</th>
+                    {trendMonths.map((m) => (
+                      <th key={m} className="px-2 py-1 text-center">
+                        {m.slice(0, 7)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {trendTests.map(([code, name]) => (
+                    <tr key={code} className="border-t border-gray-100 dark:border-gray-800">
+                      <td className="px-2 py-1">
+                        {name} <span className="text-gray-400">{code}</span>
+                      </td>
+                      {trendMonths.map((m) => {
+                        const pct = abnormalPct(code, m);
+                        return (
+                          <td key={m} className="px-2 py-1 text-center">
+                            {pct == null ? (
+                              <span className="text-gray-300">—</span>
+                            ) : (
+                              <span
+                                className="inline-block min-w-[3rem] rounded px-2 py-0.5 tabular-nums"
+                                style={{
+                                  // green (0%) → red (100%) abnormal rate.
+                                  backgroundColor: `hsl(${Math.round(120 - pct * 1.2)}, 70%, 88%)`,
+                                  color: `hsl(${Math.round(120 - pct * 1.2)}, 60%, 25%)`,
+                                }}
+                                title={`${pct}% abnormal`}
+                              >
+                                {pct}%
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <div className="grid gap-6 lg:grid-cols-3">

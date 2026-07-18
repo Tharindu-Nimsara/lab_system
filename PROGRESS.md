@@ -53,7 +53,7 @@
 |---|---|---|
 | Audit log viewer | 🟡 | `/audit` endpoint exists; UI minimal |
 | Anomaly alert queue | ✅ | `/anomalies` queue of flagged results; acknowledge/dismiss, audited |
-| Disease trend charts (nightly `@Scheduled`) | ⬜ | Aggregate flagged results over time |
+| Disease trend charts (nightly `@Scheduled`) | ✅ | V5 `disease_trends`; nightly job + on-demand refresh; abnormal-rate heat table on dashboard |
 | Login rate limiting | ✅ | In-memory throttle per IP+email; 429 + Retry-After; configurable |
 | Automated encrypted backups + restore drill | ⬜ | Ops |
 | Perf pass (indexes, slow queries) | ⬜ | |
