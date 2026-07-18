@@ -64,7 +64,7 @@
 | Unit tests (money + medicine logic) | ✅ | Flagging, patient-age, order-status, rate-limiter |
 | Integration tests (Testcontainers) | ✅ | Money path: invoice→orders→results→report; skips w/o Docker |
 | API RBAC tests (MockMvc) | ✅ | 8 tests: each role reaches only its endpoints |
-| E2E smoke (Playwright) | ⬜ | Money path |
+| E2E smoke (Playwright) | ✅ | `e2e/money-path.spec.ts`: login→register→bill; runs in CI `e2e` job (backend+Postgres+Chromium) |
 | GitHub Actions CI (`mvn verify`) | ✅ | `.github/workflows/ci.yml`: backend verify (Postgres service + Testcontainers) + frontend typecheck/build |
 
 ---
