@@ -74,10 +74,13 @@ export interface Patient {
   name: string;
   nicOrId?: string;
   dob?: string;
+  /** Computed by the backend from dob; advances automatically each year. */
+  age?: number;
   gender?: string;
   phone: string;
   email?: string;
   address?: string;
+  specialNote?: string;
   consentEmail: boolean;
   consentWhatsapp: boolean;
   createdAt?: string;

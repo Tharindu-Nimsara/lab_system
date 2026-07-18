@@ -83,9 +83,9 @@ public class ReportPdfService {
     private String demographics(Patient p) {
         StringBuilder sb = new StringBuilder();
         if (p.getGender() != null) sb.append(p.getGender());
-        if (p.getDob() != null) {
+        if (p.getAge() != null) {
             if (!sb.isEmpty()) sb.append(" · ");
-            sb.append("DOB ").append(p.getDob());
+            sb.append(p.getAge()).append(" yrs");
         }
         return sb.isEmpty() ? "—" : sb.toString();
     }

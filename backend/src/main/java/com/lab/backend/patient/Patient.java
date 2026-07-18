@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.Period;
 
 @Entity
 @Table(name = "patients")
@@ -39,6 +40,9 @@ public class Patient {
 
     private String address;
 
+    @Column(name = "special_note")
+    private String specialNote;
+
     @Column(name = "consent_email", nullable = false)
     private boolean consentEmail;
 
@@ -47,4 +51,13 @@ public class Patient {
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
+
+    /**
+     * Current age derived from DOB on every read, so it advances automatically —
+     * a patient registered by age gets dob = today − age, and their age ticks up
+     * exactly one year after the registration date.
+     */
+    public Integer getAge() {
+        return dob == null ? null : Period.between(dob, LocalDate.now()).getYears();
+    }
 }

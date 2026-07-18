@@ -2,7 +2,9 @@ package com.lab.backend.patient;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,13 +18,20 @@ public class PatientController {
 
     private final PatientService service;
 
+    /**
+     * Reception registers by {@code age} for convenience; the exact {@code dob}
+     * can be supplied instead (and wins when both are present). The stored DOB
+     * remains editable later via update.
+     */
     public record PatientRequest(@NotBlank String name,
                                  String nicOrId,
                                  LocalDate dob,
+                                 @PositiveOrZero @Max(150) Integer age,
                                  String gender,
                                  @NotBlank String phone,
                                  String email,
                                  String address,
+                                 String specialNote,
                                  Boolean consentEmail,
                                  Boolean consentWhatsapp) {}
 

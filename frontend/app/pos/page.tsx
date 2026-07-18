@@ -15,10 +15,11 @@ const EMPTY_FORM = {
   name: "",
   phone: "",
   nicOrId: "",
-  dob: "",
+  age: "",
   gender: "",
   email: "",
   address: "",
+  specialNote: "",
   consentEmail: false,
   consentWhatsapp: false,
 };
@@ -92,7 +93,7 @@ export default function PosPage() {
         method: "POST",
         body: JSON.stringify({
           ...form,
-          dob: form.dob || null,
+          age: form.age === "" ? null : Number(form.age),
         }),
       });
       setPatient(p);
@@ -141,8 +142,16 @@ export default function PosPage() {
                   <p className="font-semibold">
                     {patient.name}{" "}
                     <span className="font-normal text-gray-500">({patient.patientNo})</span>
+                    {patient.age != null && (
+                      <span className="font-normal text-gray-500"> · {patient.age} yrs</span>
+                    )}
                   </p>
                   <p className="text-gray-600 dark:text-gray-300">{patient.phone}</p>
+                  {patient.specialNote && (
+                    <p className="mt-1 rounded bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                      ⚠ {patient.specialNote}
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => setPatient(null)}
@@ -209,9 +218,12 @@ export default function PosPage() {
                       className="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <input
-                      type="date"
-                      value={form.dob}
-                      onChange={(e) => setForm({ ...form, dob: e.target.value })}
+                      type="number"
+                      min="0"
+                      max="150"
+                      placeholder="Age"
+                      value={form.age}
+                      onChange={(e) => setForm({ ...form, age: e.target.value })}
                       className="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <select
@@ -229,6 +241,13 @@ export default function PosPage() {
                       placeholder="Email"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      className="col-span-2 rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
+                    />
+                    <textarea
+                      placeholder="Special note (allergies, doctor referrals, …)"
+                      value={form.specialNote}
+                      onChange={(e) => setForm({ ...form, specialNote: e.target.value })}
+                      rows={2}
                       className="col-span-2 rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <label className="flex items-center gap-2">

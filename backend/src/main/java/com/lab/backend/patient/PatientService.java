@@ -52,8 +52,15 @@ public class PatientService {
     private void apply(Patient p, PatientController.PatientRequest req) {
         p.setName(req.name());
         p.setNicOrId(req.nicOrId());
-        p.setDob(req.dob());
+        // Exact DOB wins; otherwise derive it from the given age so the computed
+        // age advances by itself one year after this date. Neither given → keep as-is.
+        if (req.dob() != null) {
+            p.setDob(req.dob());
+        } else if (req.age() != null) {
+            p.setDob(java.time.LocalDate.now().minusYears(req.age()));
+        }
         p.setGender(req.gender());
+        p.setSpecialNote(req.specialNote());
         p.setPhone(req.phone());
         p.setEmail(req.email());
         p.setAddress(req.address());

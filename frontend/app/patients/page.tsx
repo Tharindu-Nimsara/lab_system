@@ -42,7 +42,7 @@ export default function PatientsPage() {
                 <th className="px-4 py-2">Name</th>
                 <th className="px-4 py-2">Phone</th>
                 <th className="px-4 py-2">Gender</th>
-                <th className="px-4 py-2">DOB</th>
+                <th className="px-4 py-2">Age</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -56,7 +56,7 @@ export default function PatientsPage() {
                   <td className="px-4 py-2">{p.name}</td>
                   <td className="px-4 py-2">{p.phone}</td>
                   <td className="px-4 py-2">{p.gender ?? "—"}</td>
-                  <td className="px-4 py-2">{p.dob ?? "—"}</td>
+                  <td className="px-4 py-2">{p.age != null ? `${p.age} yrs` : "—"}</td>
                 </tr>
               ))}
               {patients.length === 0 && (
