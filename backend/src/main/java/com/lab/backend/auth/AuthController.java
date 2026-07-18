@@ -32,6 +32,7 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final AuditService audit;
     private final CurrentUserService currentUser;
+    private final LoginRateLimiter rateLimiter;
     private final SecurityContextRepository contextRepository = new HttpSessionSecurityContextRepository();
 
     public record LoginRequest(@NotBlank String email, @NotBlank String password) {}
@@ -45,9 +46,19 @@ public class AuthController {
     @PostMapping("/login")
     public MeResponse login(@Valid @RequestBody LoginRequest req,
                             HttpServletRequest request, HttpServletResponse response) {
-        AppUser user = users.findByEmailAndIsActiveTrue(req.email())
-                .filter(u -> passwordEncoder.matches(req.password(), u.getPasswordHash()))
-                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+        String ip = request.getRemoteAddr();
+        rateLimiter.checkAllowed(ip, req.email());
+
+        AppUser user;
+        try {
+            user = users.findByEmailAndIsActiveTrue(req.email())
+                    .filter(u -> passwordEncoder.matches(req.password(), u.getPasswordHash()))
+                    .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+        } catch (BadCredentialsException ex) {
+            rateLimiter.recordFailure(ip, req.email());
+            throw ex;
+        }
+        rateLimiter.recordSuccess(ip, req.email());
 
         request.getSession(true);
         request.changeSessionId();   // session fixation protection
@@ -60,7 +71,7 @@ public class AuthController {
         SecurityContextHolder.setContext(context);
         contextRepository.saveContext(context, request, response);
 
-        audit.record(user.getId(), "LOGIN", "User", user.getId(), null, request.getRemoteAddr());
+        audit.record(user.getId(), "LOGIN", "User", user.getId(), null, ip);
         return toMe(user);
     }
 

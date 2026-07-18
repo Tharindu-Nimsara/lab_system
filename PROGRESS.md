@@ -54,16 +54,16 @@
 | Audit log viewer | 🟡 | `/audit` endpoint exists; UI minimal |
 | Anomaly alert queue | ⬜ | List recent out-of-range results, ack/dismiss |
 | Disease trend charts (nightly `@Scheduled`) | ⬜ | Aggregate flagged results over time |
-| Login rate limiting | ⬜ | Security §7 |
+| Login rate limiting | ✅ | In-memory throttle per IP+email; 429 + Retry-After; configurable |
 | Automated encrypted backups + restore drill | ⬜ | Ops |
 | Perf pass (indexes, slow queries) | ⬜ | |
 
 ## Testing & CI
 | Item | Status | Notes |
 |---|---|---|
-| Unit tests (money + medicine logic) | 🟡 | Flagging, patient-age, order-status covered |
-| Integration tests (Testcontainers) | ⬜ | Critical flow: invoice→orders→results→report |
-| API RBAC tests (MockMvc) | ⬜ | Each role reaches only its endpoints |
+| Unit tests (money + medicine logic) | ✅ | Flagging, patient-age, order-status, rate-limiter |
+| Integration tests (Testcontainers) | ✅ | Money path: invoice→orders→results→report; skips w/o Docker |
+| API RBAC tests (MockMvc) | ✅ | 8 tests: each role reaches only its endpoints |
 | E2E smoke (Playwright) | ⬜ | Money path |
 | GitHub Actions CI (`mvn verify`) | ⬜ | |
 
@@ -72,10 +72,11 @@
 ## Session log
 - **2026-07-18** — Pushed `feature/phase-1-mvp` to remote; updated origin to renamed repo `lab_ms_frontend`. Removed 4 stale scaffold stub files. Started PROGRESS.md.
 - **2026-07-18** — Shipped: patient soft-delete (V3 migration), duplicate-phone warning in POS quick-create, admin merge-duplicates tool (repoints invoices+reports, audited), and the test-catalog admin UI (`/catalog`). All 12 backend tests pass; frontend typechecks clean.
+- **2026-07-18** — Hardening + tests: login rate limiting (in-memory per IP+email throttle, 429 + `Retry-After`, configurable via `app.login.*`), 8 MockMvc RBAC tests (all role boundaries), and a Testcontainers money-path integration test (real Postgres; `@EnabledIfDockerAvailable` so it skips where Docker is absent). Suite: 24 pass + 1 skipped, `BUILD SUCCESS`.
 
 ## Next build order
-1. Login rate limiting (Security §7)
-2. MockMvc RBAC tests (each role reaches only its endpoints)
-3. Integration test for the money path (Testcontainers): invoice → orders → results → report
-4. Anomaly alert queue (recent out-of-range results, ack/dismiss)
-5. Email report delivery (consent-gated)
+1. Anomaly alert queue (recent out-of-range results, ack/dismiss)
+2. Email report delivery (consent-gated)
+3. Disease trend charts via nightly `@Scheduled` aggregate job
+4. Audit log viewer UI (endpoint already exists)
+5. GitHub Actions CI running `mvn verify`

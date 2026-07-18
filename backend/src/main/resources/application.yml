@@ -31,6 +31,10 @@ app:
     phone: ${LAB_PHONE:011-1234567}
   storage:
     reports-dir: ${REPORTS_DIR:./storage/reports}
+  login:
+    max-attempts: ${LOGIN_MAX_ATTEMPTS:5}       # failures per window before a block
+    window-seconds: ${LOGIN_WINDOW_SECONDS:300}  # rolling window for counting failures
+    block-seconds: ${LOGIN_BLOCK_SECONDS:900}    # how long a key stays blocked
 
 management:
   endpoints:
