@@ -28,6 +28,10 @@ public class TestLabPrice {
     @Column(nullable = false)
     private BigDecimal price;
 
+    /** Commission % we earn on this outsourced test (admin analytics only). */
+    @Column(name = "commission_rate", nullable = false)
+    private BigDecimal commissionRate = BigDecimal.ZERO;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 }

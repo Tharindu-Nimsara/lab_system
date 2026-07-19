@@ -101,4 +101,131 @@ public class AdminController {
         int rows = diseaseTrends.refresh();
         return Map.of("buckets", rows);
     }
+
+    // ---- Rich analytics (admin dashboard) ----
+
+    public record NamedAmount(String name, BigDecimal amount, long count) {}
+    public record LabRevenue(String lab, boolean outsourced, BigDecimal billed,
+                             BigDecimal commission) {}
+    public record BusyCell(int dow, int hour, long count) {}
+    public record Analytics(String period, LocalDate from, LocalDate to,
+                            long patients, long newPatients, long returningPatients,
+                            BigDecimal revenue,
+                            List<NamedAmount> revenueByTest,
+                            List<NamedAmount> topTests,
+                            List<LabRevenue> revenueByLab,
+                            List<BusyCell> busyHours) {}
+
+    /**
+     * Business analytics for a period. {@code period} = "week" (last 7 days) or
+     * "month" (current calendar month). Revenue is cash received (amount_paid),
+     * attributed to the invoice day; excludes void invoices. Commission is
+     * admin-only and never appears on invoices.
+     */
+    @GetMapping("/analytics")
+    public Analytics analytics(@RequestParam(name = "period", defaultValue = "week") String period) {
+        LocalDate today = LocalDate.now();
+        boolean month = "month".equalsIgnoreCase(period);
+        LocalDate from = month ? today.withDayOfMonth(1) : today.minusDays(6);
+        LocalDate to = today;
+
+        // Unique patients in the period, and how many were new (first-ever invoice
+        // falls inside the period) vs returning.
+        long patients = jdbc.sql("""
+                SELECT COUNT(DISTINCT patient_id) FROM invoices
+                WHERE status <> 'VOID' AND CAST(created_at AS date) BETWEEN :from AND :to
+                """).param("from", from).param("to", to).query(Long.class).single();
+
+        long newPatients = jdbc.sql("""
+                SELECT COUNT(*) FROM (
+                    SELECT patient_id, MIN(CAST(created_at AS date)) AS first_visit
+                    FROM invoices WHERE status <> 'VOID'
+                    GROUP BY patient_id
+                ) f
+                WHERE f.first_visit BETWEEN :from AND :to
+                """).param("from", from).param("to", to).query(Long.class).single();
+        long returningPatients = Math.max(0, patients - newPatients);
+
+        BigDecimal revenue = jdbc.sql("""
+                SELECT COALESCE(SUM(amount_paid), 0) FROM invoices
+                WHERE status <> 'VOID' AND CAST(created_at AS date) BETWEEN :from AND :to
+                """).param("from", from).param("to", to).query(BigDecimal.class).single();
+
+        // Revenue by test = billed value of that test's lines in the period.
+        List<NamedAmount> revenueByTest = jdbc.sql("""
+                SELECT t.name AS name,
+                       COALESCE(SUM(ii.price_at_sale), 0) AS amount,
+                       COUNT(*) AS cnt
+                FROM invoice_items ii
+                JOIN invoices i ON i.id = ii.invoice_id
+                JOIN tests t    ON t.id = ii.test_id
+                WHERE i.status <> 'VOID'
+                  AND CAST(i.created_at AS date) BETWEEN :from AND :to
+                GROUP BY t.name
+                ORDER BY amount DESC
+                """).param("from", from).param("to", to)
+                .query((rs, n) -> new NamedAmount(rs.getString("name"),
+                        rs.getBigDecimal("amount"), rs.getLong("cnt")))
+                .list();
+
+        // Top tests by volume (count of lines).
+        List<NamedAmount> topTests = jdbc.sql("""
+                SELECT t.name AS name,
+                       COALESCE(SUM(ii.price_at_sale), 0) AS amount,
+                       COUNT(*) AS cnt
+                FROM invoice_items ii
+                JOIN invoices i ON i.id = ii.invoice_id
+                JOIN tests t    ON t.id = ii.test_id
+                WHERE i.status <> 'VOID'
+                  AND CAST(i.created_at AS date) BETWEEN :from AND :to
+                GROUP BY t.name
+                ORDER BY cnt DESC
+                LIMIT 5
+                """).param("from", from).param("to", to)
+                .query((rs, n) -> new NamedAmount(rs.getString("name"),
+                        rs.getBigDecimal("amount"), rs.getLong("cnt")))
+                .list();
+
+        // Revenue routed to each lab, with our commission on outsourced ones
+        // (billed × per-test-per-lab commission_rate%). Admin-only.
+        List<LabRevenue> revenueByLab = jdbc.sql("""
+                SELECT l.name AS lab,
+                       l.is_outsourced AS outsourced,
+                       COALESCE(SUM(ii.price_at_sale), 0) AS billed,
+                       COALESCE(SUM(ii.price_at_sale * COALESCE(tlp.commission_rate, 0) / 100), 0)
+                           AS commission
+                FROM invoice_items ii
+                JOIN invoices i ON i.id = ii.invoice_id
+                JOIN labs l     ON l.id = ii.lab_id
+                LEFT JOIN test_lab_prices tlp
+                       ON tlp.test_id = ii.test_id AND tlp.lab_id = ii.lab_id
+                WHERE i.status <> 'VOID'
+                  AND CAST(i.created_at AS date) BETWEEN :from AND :to
+                GROUP BY l.name, l.is_outsourced
+                ORDER BY billed DESC
+                """).param("from", from).param("to", to)
+                .query((rs, n) -> new LabRevenue(rs.getString("lab"),
+                        rs.getBoolean("outsourced"),
+                        rs.getBigDecimal("billed"), rs.getBigDecimal("commission")))
+                .list();
+
+        // Busy hours: invoice count by day-of-week (0=Sun) × hour, local time.
+        List<BusyCell> busyHours = jdbc.sql("""
+                SELECT EXTRACT(DOW FROM created_at)::int AS dow,
+                       EXTRACT(HOUR FROM created_at)::int AS hour,
+                       COUNT(*) AS cnt
+                FROM invoices
+                WHERE status <> 'VOID'
+                  AND CAST(created_at AS date) BETWEEN :from AND :to
+                GROUP BY dow, hour
+                ORDER BY dow, hour
+                """).param("from", from).param("to", to)
+                .query((rs, n) -> new BusyCell(rs.getInt("dow"), rs.getInt("hour"),
+                        rs.getLong("cnt")))
+                .list();
+
+        return new Analytics(month ? "month" : "week", from, to,
+                patients, newPatients, returningPatients, revenue,
+                revenueByTest, topTests, revenueByLab, busyHours);
+    }
 }

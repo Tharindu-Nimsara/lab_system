@@ -11,6 +11,7 @@ interface TestForm {
   price: string;
   specimenType: string;
   templateId: string;
+  offeredInHouse: boolean;
   isActive: boolean;
 }
 
@@ -21,6 +22,7 @@ const EMPTY: TestForm = {
   price: "",
   specimenType: "",
   templateId: "",
+  offeredInHouse: true,
   isActive: true,
 };
 
@@ -36,6 +38,7 @@ export default function CatalogPage() {
   // Per-lab price editor: which test is expanded, and its {labId: priceString} draft.
   const [pricesTestId, setPricesTestId] = useState<number | null>(null);
   const [priceDraft, setPriceDraft] = useState<Record<number, string>>({});
+  const [commissionDraft, setCommissionDraft] = useState<Record<number, string>>({});
   const [priceSaving, setPriceSaving] = useState<number | null>(null);
 
   const load = useCallback(() => {
@@ -84,6 +87,8 @@ export default function CatalogPage() {
       price: String(t.price),
       specimenType: t.specimenType ?? "",
       templateId: String(t.templateId),
+      // A test with a 0 base price is treated as outsource-only.
+      offeredInHouse: Number(t.price) > 0,
       isActive: t.active,
     });
     setEditingId(t.id);
@@ -97,9 +102,10 @@ export default function CatalogPage() {
       code: form.code,
       name: form.name,
       category: form.category,
-      price: Number(form.price),
+      price: form.offeredInHouse ? Number(form.price) : null,
       specimenType: form.specimenType || null,
       templateId: Number(form.templateId),
+      offeredInHouse: form.offeredInHouse,
       isActive: form.isActive,
     });
     try {
@@ -144,11 +150,17 @@ export default function CatalogPage() {
     setError("");
     setPricesTestId(t.id);
     setPriceDraft({});
+    setCommissionDraft({});
     try {
       const prices = await api<LabPrice[]>(`/catalog/tests/${t.id}/prices`);
       const draft: Record<number, string> = {};
-      for (const p of prices) draft[p.labId] = String(Number(p.price));
+      const comm: Record<number, string> = {};
+      for (const p of prices) {
+        draft[p.labId] = String(Number(p.price));
+        if (p.commissionRate != null) comm[p.labId] = String(Number(p.commissionRate));
+      }
       setPriceDraft(draft);
+      setCommissionDraft(comm);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load lab prices");
     }
@@ -160,9 +172,15 @@ export default function CatalogPage() {
     setPriceSaving(labId);
     setError("");
     try {
+      const comm = commissionDraft[labId];
       await api<LabPrice>(`/catalog/tests/${testId}/prices`, {
         method: "PUT",
-        body: JSON.stringify({ labId, price: Number(raw), isActive: true }),
+        body: JSON.stringify({
+          labId,
+          price: Number(raw),
+          commissionRate: comm === undefined || comm === "" ? 0 : Number(comm),
+          isActive: true,
+        }),
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save price");
@@ -231,17 +249,30 @@ export default function CatalogPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-gray-500">Price *</label>
+              <label className="mb-1 block text-xs text-gray-500">
+                In-house price {form.offeredInHouse ? "*" : "(outsource-only)"}
+              </label>
               <input
-                required
+                required={form.offeredInHouse}
+                disabled={!form.offeredInHouse}
                 type="number"
                 min="0"
                 step="0.01"
-                value={form.price}
+                placeholder={form.offeredInHouse ? "" : "set per lab below"}
+                value={form.offeredInHouse ? form.price : ""}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
-                className={input}
+                className={`${input} disabled:opacity-50`}
               />
             </div>
+            <label className="col-span-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.offeredInHouse}
+                onChange={(e) => setForm({ ...form, offeredInHouse: e.target.checked })}
+              />
+              Our lab performs this test (uncheck for an outsource-only test — set its
+              prices per lab after saving)
+            </label>
             <div>
               <label className="mb-1 block text-xs text-gray-500">Specimen type</label>
               <input
@@ -349,14 +380,14 @@ export default function CatalogPage() {
                       <td colSpan={7} className="bg-gray-50 px-4 py-3 dark:bg-gray-800/50">
                         <p className="mb-2 text-xs text-gray-500">
                           Price of <span className="font-medium">{t.name}</span> at each lab.
-                          Leave blank + Save to skip a lab; a lab with a price is offered for
-                          this test.
+                          Leave blank + Save to skip a lab. For outsourced labs, set the
+                          commission % we earn (admin-only, never shown on bills).
                         </p>
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="grid gap-2 lg:grid-cols-2">
                           {labs.map((lab) => (
                             <div key={lab.id} className="flex items-center gap-2">
                               <span
-                                className={`min-w-[9rem] text-sm ${
+                                className={`min-w-[8rem] text-sm ${
                                   lab.outsourced
                                     ? "text-purple-700 dark:text-purple-300"
                                     : "font-medium"
@@ -371,13 +402,36 @@ export default function CatalogPage() {
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                placeholder="—"
+                                placeholder="price"
                                 value={priceDraft[lab.id] ?? ""}
                                 onChange={(e) =>
                                   setPriceDraft((d) => ({ ...d, [lab.id]: e.target.value }))
                                 }
-                                className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-sm dark:border-gray-700 dark:bg-gray-800"
+                                className="w-20 rounded border border-gray-300 px-2 py-1 text-right text-sm dark:border-gray-700 dark:bg-gray-800"
                               />
+                              {lab.outsourced ? (
+                                <span className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.5"
+                                    placeholder="comm"
+                                    title="Commission % we earn"
+                                    value={commissionDraft[lab.id] ?? ""}
+                                    onChange={(e) =>
+                                      setCommissionDraft((d) => ({
+                                        ...d,
+                                        [lab.id]: e.target.value,
+                                      }))
+                                    }
+                                    className="w-16 rounded border border-gray-300 px-2 py-1 text-right text-sm dark:border-gray-700 dark:bg-gray-800"
+                                  />
+                                  <span className="text-xs text-gray-400">%</span>
+                                </span>
+                              ) : (
+                                <span className="w-[4.5rem]" />
+                              )}
                               <button
                                 onClick={() => saveLabPrice(t.id, lab.id)}
                                 disabled={priceSaving === lab.id}

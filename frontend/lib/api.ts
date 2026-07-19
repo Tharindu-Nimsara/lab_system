@@ -127,7 +127,42 @@ export interface LabPrice {
   labName: string;
   outsourced: boolean;
   price: string | number;
+  /** Commission % on this outsourced test — admin only, null otherwise. */
+  commissionRate: string | number | null;
   active: boolean;
+}
+
+export interface NamedAmount {
+  name: string;
+  amount: string | number;
+  count: number;
+}
+
+export interface LabRevenue {
+  lab: string;
+  outsourced: boolean;
+  billed: string | number;
+  commission: string | number;
+}
+
+export interface BusyCell {
+  dow: number; // 0 = Sunday
+  hour: number;
+  count: number;
+}
+
+export interface Analytics {
+  period: string;
+  from: string;
+  to: string;
+  patients: number;
+  newPatients: number;
+  returningPatients: number;
+  revenue: string | number;
+  revenueByTest: NamedAmount[];
+  topTests: NamedAmount[];
+  revenueByLab: LabRevenue[];
+  busyHours: BusyCell[];
 }
 
 export type OrderStatus = "PENDING" | "COLLECTED" | "IN_PROGRESS" | "COMPLETED" | "VERIFIED";

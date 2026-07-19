@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Nav from "@/components/Nav";
-import { api, ApiError } from "@/lib/api";
+import { Analytics, api, ApiError } from "@/lib/api";
 
 interface DayPoint {
   day: string;
@@ -68,6 +68,8 @@ export default function AdminPage() {
   const [monthly, setMonthly] = useState<Summary | null>(null);
   const [trends, setTrends] = useState<TrendPoint[]>([]);
   const [refreshingTrends, setRefreshingTrends] = useState(false);
+  const [period, setPeriod] = useState<"week" | "month">("week");
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [error, setError] = useState("");
   const [expense, setExpense] = useState({
     category: "KITS",
@@ -85,6 +87,12 @@ export default function AdminPage() {
   }, []);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    api<Analytics>(`/admin/analytics?period=${period}`)
+      .then(setAnalytics)
+      .catch(() => setAnalytics(null));
+  }, [period]);
 
   async function refreshTrends() {
     setRefreshingTrends(true);
@@ -128,6 +136,28 @@ export default function AdminPage() {
 
   const maxRevenue = Math.max(1, ...(stats?.last14Days ?? []).map((d) => Number(d.revenue)));
 
+  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const busyHours = analytics?.busyHours ?? [];
+  const busyMax = Math.max(1, ...busyHours.map((c) => c.count));
+  const busyAt = (dow: number, hour: number) =>
+    busyHours.find((c) => c.dow === dow && c.hour === hour)?.count ?? 0;
+  // Only show the hour range that actually has activity (keeps the grid compact).
+  const activeHours = busyHours.length
+    ? {
+        min: Math.min(...busyHours.map((c) => c.hour)),
+        max: Math.max(...busyHours.map((c) => c.hour)),
+      }
+    : { min: 8, max: 18 };
+  const hourList: number[] = [];
+  for (let h = activeHours.min; h <= activeHours.max; h++) hourList.push(h);
+
+  const maxTestRev = Math.max(1, ...(analytics?.revenueByTest ?? []).map((t) => Number(t.amount)));
+  const maxTop = Math.max(1, ...(analytics?.topTests ?? []).map((t) => t.count));
+  const totalCommission = (analytics?.revenueByLab ?? []).reduce(
+    (s, l) => s + Number(l.commission),
+    0,
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Nav />
@@ -168,6 +198,208 @@ export default function AdminPage() {
               </span>
             ))}
           </div>
+        </section>
+
+        {/* ---- Period analytics ---- */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">
+            Business analytics
+            {analytics && (
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                {analytics.from} → {analytics.to}
+              </span>
+            )}
+          </h2>
+          <div className="flex gap-1">
+            {(["week", "month"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`rounded px-3 py-1 text-sm ${
+                  period === p
+                    ? "bg-blue-600 text-white"
+                    : "border border-gray-300 dark:border-gray-700"
+                }`}
+              >
+                {p === "week" ? "This week" : "This month"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Tile
+            label={`Patients (${period})`}
+            value={analytics ? String(analytics.patients) : "—"}
+          />
+          <Tile
+            label="New / returning"
+            value={analytics ? `${analytics.newPatients} / ${analytics.returningPatients}` : "—"}
+          />
+          <Tile
+            label={`Revenue (${period})`}
+            value={analytics ? Number(analytics.revenue).toFixed(2) : "—"}
+          />
+          <Tile
+            label="Commission (outsourcing)"
+            value={analytics ? totalCommission.toFixed(2) : "—"}
+          />
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Revenue by test */}
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+            <h2 className="mb-3 font-semibold">Revenue by test</h2>
+            {analytics && analytics.revenueByTest.length > 0 ? (
+              <ul className="space-y-2 text-sm">
+                {analytics.revenueByTest.slice(0, 8).map((t) => (
+                  <li key={t.name}>
+                    <div className="mb-0.5 flex justify-between">
+                      <span>{t.name}</span>
+                      <span className="tabular-nums text-gray-500">
+                        {Number(t.amount).toFixed(2)}{" "}
+                        <span className="text-gray-400">({t.count})</span>
+                      </span>
+                    </div>
+                    <div className="h-2 rounded bg-gray-100 dark:bg-gray-800">
+                      <div
+                        className="h-2 rounded bg-blue-600"
+                        style={{ width: `${(Number(t.amount) / maxTestRev) * 100}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-400">No revenue in this period.</p>
+            )}
+          </section>
+
+          {/* Top 5 selling tests (by volume) */}
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+            <h2 className="mb-3 font-semibold">Top 5 tests (by volume)</h2>
+            {analytics && analytics.topTests.length > 0 ? (
+              <ul className="space-y-2 text-sm">
+                {analytics.topTests.map((t, i) => (
+                  <li key={t.name} className="flex items-center gap-3">
+                    <span className="w-5 text-center font-semibold text-gray-400">
+                      {i + 1}
+                    </span>
+                    <span className="flex-1">{t.name}</span>
+                    <div className="h-2 w-24 rounded bg-gray-100 dark:bg-gray-800">
+                      <div
+                        className="h-2 rounded bg-emerald-500"
+                        style={{ width: `${(t.count / maxTop) * 100}%` }}
+                      />
+                    </div>
+                    <span className="w-8 text-right tabular-nums">{t.count}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-400">No tests sold in this period.</p>
+            )}
+          </section>
+        </div>
+
+        {/* Revenue by outsourcing (admin only — commission) */}
+        <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-1 font-semibold">Revenue by lab (outsourcing)</h2>
+          <p className="mb-3 text-xs text-gray-500">
+            Billed value routed to each lab. Commission is what we earn on outsourced tests
+            (set per test per lab in the catalog) — admin only, never shown on bills.
+          </p>
+          {analytics && analytics.revenueByLab.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-gray-500">
+                  <tr>
+                    <th className="py-1">Lab</th>
+                    <th className="py-1 text-right">Billed</th>
+                    <th className="py-1 text-right">Commission</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {analytics.revenueByLab.map((l) => (
+                    <tr key={l.lab}>
+                      <td className="py-1.5">
+                        {l.lab}
+                        {l.outsourced ? (
+                          <span className="ml-2 rounded bg-purple-100 px-1.5 py-0.5 text-xs text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                            outsourced
+                          </span>
+                        ) : (
+                          <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-800 dark:bg-green-950 dark:text-green-300">
+                            in-house
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        {Number(l.billed).toFixed(2)}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        {l.outsourced ? Number(l.commission).toFixed(2) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">No lab revenue in this period.</p>
+          )}
+        </section>
+
+        {/* Busy hours */}
+        <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-1 font-semibold">Busy hours</h2>
+          <p className="mb-3 text-xs text-gray-500">
+            Invoices by day of week and hour — darker = busier. Helps plan reception staffing.
+          </p>
+          {busyHours.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="text-xs">
+                <thead>
+                  <tr>
+                    <th className="p-1"></th>
+                    {hourList.map((h) => (
+                      <th key={h} className="p-1 text-center font-normal text-gray-400">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {DOW.map((label, dow) => (
+                    <tr key={dow}>
+                      <td className="pr-2 text-right font-medium text-gray-500">{label}</td>
+                      {hourList.map((h) => {
+                        const c = busyAt(dow, h);
+                        const intensity = c === 0 ? 0 : 0.15 + (c / busyMax) * 0.85;
+                        return (
+                          <td key={h} className="p-0.5">
+                            <div
+                              title={`${label} ${h}:00 — ${c} invoice${c === 1 ? "" : "s"}`}
+                              className="h-6 w-6 rounded"
+                              style={{
+                                backgroundColor:
+                                  c === 0
+                                    ? "transparent"
+                                    : `rgba(37, 99, 235, ${intensity})`,
+                                border: c === 0 ? "1px solid rgba(148,163,184,.2)" : "none",
+                              }}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">No activity in this period yet.</p>
+          )}
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">

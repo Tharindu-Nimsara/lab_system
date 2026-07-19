@@ -25,12 +25,18 @@ public class CatalogController {
     private final LabRepository labs;
     private final TestLabPriceRepository labPrices;
 
+    /**
+     * {@code offeredInHouse} = our lab does this test; then {@code price} is its
+     * in-house price. When false the test is outsource-only (no in-house price
+     * row) and {@code price} is ignored — outsourced prices are set per lab.
+     */
     public record TestRequest(@NotBlank String code,
                               @NotBlank String name,
                               @NotBlank String category,
-                              @NotNull @PositiveOrZero BigDecimal price,
+                              @PositiveOrZero BigDecimal price,
                               String specimenType,
                               @NotNull Long templateId,
+                              Boolean offeredInHouse,
                               Boolean isActive) {}
 
     public record TemplateRequest(@NotBlank String name, @NotNull JsonNode fields) {}
@@ -77,28 +83,44 @@ public class CatalogController {
     }
 
     private LabTest applyTest(LabTest test, TestRequest req) {
+        boolean inHouse = req.offeredInHouse() == null || req.offeredInHouse();
+        BigDecimal basePrice = req.price() == null ? BigDecimal.ZERO : req.price();
+        if (inHouse && req.price() == null) {
+            throw new IllegalArgumentException("An in-house test needs a price");
+        }
+
         test.setCode(req.code());
         test.setName(req.name());
         test.setCategory(req.category());
-        test.setPrice(req.price());
+        // tests.price is a base/display price; for outsource-only tests it's 0
+        // and the real prices live on the per-lab rows.
+        test.setPrice(basePrice);
         test.setSpecimenType(req.specimenType());
         test.setTemplateId(req.templateId());
         test.setActive(req.isActive() == null || req.isActive());
         LabTest saved = tests.save(test);
 
-        // Keep the in-house price row in sync with the test's base price so the
-        // test is billable at our own lab. (Outsourced-lab prices are managed
-        // separately via the per-lab price endpoints.)
-        labs.findFirstByIsOutsourcedFalse().ifPresent(inHouse -> {
-            TestLabPrice tlp = labPrices.findByTestIdAndLabId(saved.getId(), inHouse.getId())
-                    .orElseGet(() -> {
-                        TestLabPrice n = new TestLabPrice();
-                        n.setTestId(saved.getId());
-                        n.setLabId(inHouse.getId());
-                        return n;
-                    });
-            tlp.setPrice(req.price());
-            labPrices.save(tlp);
+        // Sync the in-house price row when the test is offered in-house. For an
+        // outsource-only test, deactivate any existing in-house row (e.g. a test
+        // we used to do and now only outsource) so it can't be billed at our lab.
+        labs.findFirstByIsOutsourcedFalse().ifPresent(house -> {
+            var existing = labPrices.findByTestIdAndLabId(saved.getId(), house.getId());
+            if (inHouse) {
+                TestLabPrice tlp = existing.orElseGet(() -> {
+                    TestLabPrice n = new TestLabPrice();
+                    n.setTestId(saved.getId());
+                    n.setLabId(house.getId());
+                    return n;
+                });
+                tlp.setPrice(basePrice);
+                tlp.setActive(true);
+                labPrices.save(tlp);
+            } else {
+                existing.ifPresent(tlp -> {
+                    tlp.setActive(false);
+                    labPrices.save(tlp);
+                });
+            }
         });
         return saved;
     }
@@ -140,13 +162,19 @@ public class CatalogController {
         return labs.findByIsActiveTrueOrderBySortOrderAscNameAsc();
     }
 
-    /** One lab's price for a test, with the lab's name and outsourced flag. */
+    /**
+     * One lab's price for a test. {@code commissionRate} (percent we earn on the
+     * outsourced test) is admin-only — non-admins receive null.
+     */
     public record LabPrice(Long labPriceId, Long labId, String labName, boolean outsourced,
-                           BigDecimal price, boolean active) {}
+                           BigDecimal price, BigDecimal commissionRate, boolean active) {}
 
     /** All labs' prices for a test — powers the POS price comparison. */
     @GetMapping("/tests/{testId}/prices")
-    public List<LabPrice> testPrices(@PathVariable Long testId) {
+    public List<LabPrice> testPrices(@PathVariable Long testId,
+                                     org.springframework.security.core.Authentication auth) {
+        boolean admin = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
         Map<Long, Lab> labById = labs.findAll().stream()
                 .collect(java.util.stream.Collectors.toMap(Lab::getId, l -> l));
         return labPrices.findByTestId(testId).stream()
@@ -156,7 +184,9 @@ public class CatalogController {
                     return new LabPrice(p.getId(), p.getLabId(),
                             l != null ? l.getName() : "?",
                             l != null && l.isOutsourced(),
-                            p.getPrice(), p.isActive());
+                            p.getPrice(),
+                            admin ? p.getCommissionRate() : null,  // admin-only
+                            p.isActive());
                 })
                 .sorted(java.util.Comparator.comparing(LabPrice::outsourced)
                         .thenComparing(LabPrice::labName))
@@ -165,9 +195,10 @@ public class CatalogController {
 
     public record LabPriceRequest(@NotNull Long labId,
                                   @NotNull @PositiveOrZero BigDecimal price,
+                                  @PositiveOrZero BigDecimal commissionRate,
                                   Boolean isActive) {}
 
-    /** Add or update a test's price at a lab (admin). Upsert on (test, lab). */
+    /** Add or update a test's price (and commission) at a lab (admin). Upsert on (test, lab). */
     @PutMapping("/tests/{testId}/prices")
     @PreAuthorize("hasRole('ADMIN')")
     public LabPrice setTestPrice(@PathVariable Long testId, @Valid @RequestBody LabPriceRequest req) {
@@ -184,9 +215,12 @@ public class CatalogController {
                     return n;
                 });
         tlp.setPrice(req.price());
+        if (req.commissionRate() != null) {
+            tlp.setCommissionRate(req.commissionRate());
+        }
         tlp.setActive(req.isActive() == null || req.isActive());
         tlp = labPrices.save(tlp);
         return new LabPrice(tlp.getId(), lab.getId(), lab.getName(), lab.isOutsourced(),
-                tlp.getPrice(), tlp.isActive());
+                tlp.getPrice(), tlp.getCommissionRate(), tlp.isActive());
     }
 }
