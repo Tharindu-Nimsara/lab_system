@@ -1,0 +1,11 @@
+.idea/
+.git-stub-backup/
+.vscode/
+.playwright-mcp/
+.dist/
+node_modules/
+target/
+storage/
+test-results/
+playwright-report/
+.playwright/

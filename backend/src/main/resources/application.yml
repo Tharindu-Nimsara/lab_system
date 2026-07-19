@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/lab_db}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:tn24536}
+  jpa:
+    hibernate:
+      ddl-auto: validate        # Flyway owns the schema; Hibernate only checks it
+    open-in-view: false
+  flyway:
+    enabled: true
+  session:
+    jdbc:
+      initialize-schema: always
+    timeout: 8h
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+
+server:
+  port: 4000
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+
+app:
+  lab:
+    name: ${LAB_NAME:Medical Laboratory}
+    address: ${LAB_ADDRESS:123 Main Street, Colombo}
+    phone: ${LAB_PHONE:011-1234567}
+  storage:
+    reports-dir: ${REPORTS_DIR:./storage/reports}
+  mail:
+    # Off by default so the app boots without a real SMTP server; set true in
+    # environments with mail configured. When false, the send endpoint 400s.
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:no-reply@medical-lab.local}
+  whatsapp:
+    # Off by default; needs a Meta WhatsApp Business Cloud API app (see MANUAL_TASKS.md).
+    enabled: ${WHATSAPP_ENABLED:false}
+    api-base: ${WHATSAPP_API_BASE:https://graph.facebook.com/v21.0}
+    phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
+    access-token: ${WHATSAPP_ACCESS_TOKEN:}
+    default-country-code: ${WHATSAPP_DEFAULT_CC:94}   # Sri Lanka; used to normalize local numbers
+  analytics:
+    disease-trend-cron: ${DISEASE_TREND_CRON:0 30 2 * * *}
+  login:
+    max-attempts: ${LOGIN_MAX_ATTEMPTS:5}       # failures per window before a block
+    window-seconds: ${LOGIN_WINDOW_SECONDS:300}  # rolling window for counting failures
+    block-seconds: ${LOGIN_BLOCK_SECONDS:900}    # how long a key stays blocked
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
