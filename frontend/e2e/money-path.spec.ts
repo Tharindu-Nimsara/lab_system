@@ -31,10 +31,12 @@ test("reception can register a patient and bill a test", async ({ page }) => {
   await expect(page.getByText("E2E Test Patient")).toBeVisible();
   await expect(page.getByRole("button", { name: "Change" })).toBeVisible();
 
-  // --- Pick the first available test ---
+  // --- Pick the first available test (defaults to in-house lab, opens comparison) ---
   const firstTest = page.locator("section:has-text('2 · Tests') li button").first();
   await expect(firstTest).toBeVisible();
   await firstTest.click();
+  // Close the lab-price comparison (keeps the default in-house lab).
+  await page.getByRole("button", { name: "Done" }).click();
 
   // --- Save the invoice ---
   await page.getByRole("button", { name: "Save invoice" }).click();

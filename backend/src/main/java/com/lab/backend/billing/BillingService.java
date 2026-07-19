@@ -2,8 +2,12 @@ package com.lab.backend.billing;
 
 import com.lab.backend.auth.AppUser;
 import com.lab.backend.auth.CurrentUserService;
+import com.lab.backend.catalog.Lab;
+import com.lab.backend.catalog.LabRepository;
 import com.lab.backend.catalog.LabTest;
 import com.lab.backend.catalog.LabTestRepository;
+import com.lab.backend.catalog.TestLabPrice;
+import com.lab.backend.catalog.TestLabPriceRepository;
 import com.lab.backend.common.NotFoundException;
 import com.lab.backend.common.audit.AuditService;
 import com.lab.backend.patient.PatientRepository;
@@ -26,11 +30,14 @@ public class BillingService {
     private final InvoiceItemRepository items;
     private final OrderRepository orders;
     private final LabTestRepository tests;
+    private final LabRepository labs;
+    private final TestLabPriceRepository labPrices;
     private final PatientRepository patients;
     private final CurrentUserService currentUser;
     private final AuditService audit;
 
     public record InvoiceItemDetail(Long itemId, Long testId, String testCode, String testName,
+                                    Long labId, String labName, boolean outsourced,
                                     BigDecimal priceAtSale, Long orderId, OrderStatus orderStatus) {}
 
     public record InvoiceDetail(Invoice invoice, List<InvoiceItemDetail> items) {}
@@ -43,14 +50,30 @@ public class BillingService {
         if (!patients.existsById(req.patientId())) {
             throw new NotFoundException("Patient not found: " + req.patientId());
         }
-
-        List<LabTest> selected = tests.findAllById(req.testIds());
-        if (selected.size() != req.testIds().stream().distinct().count()) {
-            throw new NotFoundException("One or more tests not found");
+        if (req.lines() == null || req.lines().isEmpty()) {
+            throw new IllegalArgumentException("At least one test is required");
         }
 
-        BigDecimal subtotal = selected.stream()
-                .map(LabTest::getPrice)
+        // Resolve each line to (test, lab, price-at-that-lab) up front so we can
+        // total before saving anything.
+        record Priced(Long testId, Long labId, BigDecimal price) {}
+        List<Priced> priced = req.lines().stream().map(line -> {
+            if (!tests.existsById(line.testId())) {
+                throw new NotFoundException("Test not found: " + line.testId());
+            }
+            if (!labs.existsById(line.labId())) {
+                throw new NotFoundException("Lab not found: " + line.labId());
+            }
+            TestLabPrice tlp = labPrices.findByTestIdAndLabId(line.testId(), line.labId())
+                    .filter(TestLabPrice::isActive)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "This lab does not offer test " + line.testId()
+                                    + " (no price for lab " + line.labId() + ")"));
+            return new Priced(line.testId(), line.labId(), tlp.getPrice());
+        }).toList();
+
+        BigDecimal subtotal = priced.stream()
+                .map(Priced::price)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal discount = req.discount() == null ? BigDecimal.ZERO : req.discount();
         if (discount.compareTo(subtotal) > 0) {
@@ -77,11 +100,12 @@ public class BillingService {
         inv.recomputeStatus();
         inv = invoices.save(inv);
 
-        for (LabTest t : selected) {
+        for (Priced p : priced) {
             InvoiceItem item = new InvoiceItem();
             item.setInvoiceId(inv.getId());
-            item.setTestId(t.getId());
-            item.setPriceAtSale(t.getPrice());
+            item.setTestId(p.testId());
+            item.setLabId(p.labId());
+            item.setPriceAtSale(p.price());
             item = items.save(item);
 
             LabOrder order = new LabOrder();
@@ -150,12 +174,18 @@ public class BillingService {
         Map<Long, LabOrder> orderByItemId = orders.findByInvoiceItemIdIn(
                         invItems.stream().map(InvoiceItem::getId).toList()).stream()
                 .collect(java.util.stream.Collectors.toMap(LabOrder::getInvoiceItemId, Function.identity()));
+        Map<Long, Lab> labById = labs.findAllById(
+                        invItems.stream().map(InvoiceItem::getLabId).toList()).stream()
+                .collect(java.util.stream.Collectors.toMap(Lab::getId, Function.identity()));
 
         List<InvoiceItemDetail> details = invItems.stream().map(item -> {
             LabTest t = testById.get(item.getTestId());
             LabOrder o = orderByItemId.get(item.getId());
+            Lab lab = labById.get(item.getLabId());
             return new InvoiceItemDetail(item.getId(), item.getTestId(),
                     t != null ? t.getCode() : null, t != null ? t.getName() : null,
+                    item.getLabId(), lab != null ? lab.getName() : null,
+                    lab != null && lab.isOutsourced(),
                     item.getPriceAtSale(),
                     o != null ? o.getId() : null, o != null ? o.getStatus() : null);
         }).toList();

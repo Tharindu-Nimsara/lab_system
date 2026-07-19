@@ -28,12 +28,17 @@ public class BillingController {
     private final BillPdfService billPdf;
     private final PatientRepository patients;
 
+    /** One billed line: a test fulfilled by a chosen lab (in-house or outsourced). */
+    public record LineItem(@NotNull Long testId, @NotNull Long labId) {}
+
     /**
      * {@code amountPaid} is the amount collected now: null means pay the full
      * total, a smaller value records a partial payment (deposit) leaving a balance.
+     * Each line names the test and the lab fulfilling it; the price is looked up
+     * from that lab's price for the test.
      */
     public record CreateInvoiceRequest(@NotNull Long patientId,
-                                       @NotEmpty List<Long> testIds,
+                                       @NotEmpty @jakarta.validation.Valid List<LineItem> lines,
                                        @PositiveOrZero BigDecimal discount,
                                        @NotNull @Pattern(regexp = "CASH|CARD") String paymentMethod,
                                        @PositiveOrZero BigDecimal amountPaid) {}

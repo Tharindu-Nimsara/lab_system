@@ -56,18 +56,37 @@ public class BillPdfService {
         meta.setSpacingAfter(8);
         doc.add(meta);
 
-        PdfPTable table = new PdfPTable(worksheet ? new float[]{2, 4, 6} : new float[]{2, 6, 3});
+        boolean anyOutsourced = detail.items().stream()
+                .anyMatch(BillingService.InvoiceItemDetail::outsourced);
+
+        PdfPTable table = new PdfPTable(worksheet ? new float[]{2, 4, 6} : new float[]{2, 5, 3, 3});
         table.setWidthPercentage(100);
         table.addCell(headerCell("Code"));
         table.addCell(headerCell("Test"));
+        if (!worksheet) {
+            table.addCell(headerCell("Lab"));
+        }
         table.addCell(headerCell(worksheet ? "Result (handwritten)" : "Price"));
         for (BillingService.InvoiceItemDetail item : detail.items()) {
             table.addCell(cell(item.testCode(), BODY));
             table.addCell(cell(item.testName(), BODY));
+            if (!worksheet) {
+                // Outsourced labs are marked with * (see footnote) so they stand out.
+                String labText = item.labName() == null ? "—"
+                        : item.labName() + (item.outsourced() ? " *" : "");
+                table.addCell(cell(labText, item.outsourced() ? BODY_BOLD : BODY));
+            }
             table.addCell(cell(worksheet ? " " : item.priceAtSale().toPlainString(), BODY));
         }
-        table.setSpacingAfter(8);
+        table.setSpacingAfter(4);
         doc.add(table);
+
+        if (!worksheet && anyOutsourced) {
+            Paragraph note = new Paragraph(
+                    "* Outsourced test — performed by an external partner lab.", SMALL);
+            note.setSpacingAfter(6);
+            doc.add(note);
+        }
 
         if (!worksheet) {
             PdfPTable totals = new PdfPTable(2);

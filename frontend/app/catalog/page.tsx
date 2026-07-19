@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Nav from "@/components/Nav";
-import { api, ApiError, LabTest, TestTemplate } from "@/lib/api";
+import { api, ApiError, Lab, LabPrice, LabTest, TestTemplate } from "@/lib/api";
 
 interface TestForm {
   code: string;
@@ -27,10 +27,16 @@ const EMPTY: TestForm = {
 export default function CatalogPage() {
   const [tests, setTests] = useState<LabTest[]>([]);
   const [templates, setTemplates] = useState<TestTemplate[]>([]);
+  const [labs, setLabs] = useState<Lab[]>([]);
   const [editingId, setEditingId] = useState<number | "new" | null>(null);
   const [form, setForm] = useState<TestForm>(EMPTY);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
+
+  // Per-lab price editor: which test is expanded, and its {labId: priceString} draft.
+  const [pricesTestId, setPricesTestId] = useState<number | null>(null);
+  const [priceDraft, setPriceDraft] = useState<Record<number, string>>({});
+  const [priceSaving, setPriceSaving] = useState<number | null>(null);
 
   const load = useCallback(() => {
     // /tests/all is admin-only and includes inactive tests.
@@ -39,6 +45,9 @@ export default function CatalogPage() {
       .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load tests"));
     api<TestTemplate[]>("/catalog/templates")
       .then(setTemplates)
+      .catch(() => {});
+    api<Lab[]>("/catalog/labs")
+      .then(setLabs)
       .catch(() => {});
   }, []);
 
@@ -124,6 +133,41 @@ export default function CatalogPage() {
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to update");
+    }
+  }
+
+  async function openPrices(t: LabTest) {
+    if (pricesTestId === t.id) {
+      setPricesTestId(null);
+      return;
+    }
+    setError("");
+    setPricesTestId(t.id);
+    setPriceDraft({});
+    try {
+      const prices = await api<LabPrice[]>(`/catalog/tests/${t.id}/prices`);
+      const draft: Record<number, string> = {};
+      for (const p of prices) draft[p.labId] = String(Number(p.price));
+      setPriceDraft(draft);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load lab prices");
+    }
+  }
+
+  async function saveLabPrice(testId: number, labId: number) {
+    const raw = priceDraft[labId];
+    if (raw === undefined || raw === "") return;
+    setPriceSaving(labId);
+    setError("");
+    try {
+      await api<LabPrice>(`/catalog/tests/${testId}/prices`, {
+        method: "PUT",
+        body: JSON.stringify({ labId, price: Number(raw), isActive: true }),
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save price");
+    } finally {
+      setPriceSaving(null);
     }
   }
 
@@ -267,41 +311,87 @@ export default function CatalogPage() {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {filtered.map((t) => (
-                <tr
-                  key={t.id}
-                  className={t.active ? "" : "text-gray-400"}
-                >
-                  <td className="px-4 py-2 font-mono text-xs">{t.code}</td>
-                  <td className="px-4 py-2">{t.name}</td>
-                  <td className="px-4 py-2">{t.category}</td>
-                  <td className="px-4 py-2">{templateName(t.templateId)}</td>
-                  <td className="px-4 py-2 text-right">{Number(t.price).toFixed(2)}</td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={
-                        t.active
-                          ? "text-green-600"
-                          : "text-gray-400"
-                      }
-                    >
-                      {t.active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => startEdit(t)}
-                      className="mr-2 text-blue-600 hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => toggleActive(t)}
-                      className="text-gray-500 hover:underline"
-                    >
-                      {t.active ? "Deactivate" : "Activate"}
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={t.id}>
+                  <tr className={t.active ? "" : "text-gray-400"}>
+                    <td className="px-4 py-2 font-mono text-xs">{t.code}</td>
+                    <td className="px-4 py-2">{t.name}</td>
+                    <td className="px-4 py-2">{t.category}</td>
+                    <td className="px-4 py-2">{templateName(t.templateId)}</td>
+                    <td className="px-4 py-2 text-right">{Number(t.price).toFixed(2)}</td>
+                    <td className="px-4 py-2">
+                      <span className={t.active ? "text-green-600" : "text-gray-400"}>
+                        {t.active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => openPrices(t)}
+                        className="mr-2 text-purple-600 hover:underline"
+                      >
+                        Lab prices
+                      </button>
+                      <button
+                        onClick={() => startEdit(t)}
+                        className="mr-2 text-blue-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => toggleActive(t)}
+                        className="text-gray-500 hover:underline"
+                      >
+                        {t.active ? "Deactivate" : "Activate"}
+                      </button>
+                    </td>
+                  </tr>
+                  {pricesTestId === t.id && (
+                    <tr>
+                      <td colSpan={7} className="bg-gray-50 px-4 py-3 dark:bg-gray-800/50">
+                        <p className="mb-2 text-xs text-gray-500">
+                          Price of <span className="font-medium">{t.name}</span> at each lab.
+                          Leave blank + Save to skip a lab; a lab with a price is offered for
+                          this test.
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {labs.map((lab) => (
+                            <div key={lab.id} className="flex items-center gap-2">
+                              <span
+                                className={`min-w-[9rem] text-sm ${
+                                  lab.outsourced
+                                    ? "text-purple-700 dark:text-purple-300"
+                                    : "font-medium"
+                                }`}
+                              >
+                                {lab.name}
+                                {!lab.outsourced && (
+                                  <span className="ml-1 text-xs text-gray-400">(our lab)</span>
+                                )}
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="—"
+                                value={priceDraft[lab.id] ?? ""}
+                                onChange={(e) =>
+                                  setPriceDraft((d) => ({ ...d, [lab.id]: e.target.value }))
+                                }
+                                className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-sm dark:border-gray-700 dark:bg-gray-800"
+                              />
+                              <button
+                                onClick={() => saveLabPrice(t.id, lab.id)}
+                                disabled={priceSaving === lab.id}
+                                className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-40"
+                              >
+                                {priceSaving === lab.id ? "…" : "Save"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               {filtered.length === 0 && (
                 <tr>

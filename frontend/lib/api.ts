@@ -112,6 +112,24 @@ export interface LabTest {
   active: boolean;
 }
 
+export interface Lab {
+  id: number;
+  name: string;
+  outsourced: boolean;
+  active: boolean;
+  sortOrder: number;
+}
+
+/** One lab's price for a test (from /catalog/tests/{id}/prices). */
+export interface LabPrice {
+  labPriceId: number | null;
+  labId: number;
+  labName: string;
+  outsourced: boolean;
+  price: string | number;
+  active: boolean;
+}
+
 export type OrderStatus = "PENDING" | "COLLECTED" | "IN_PROGRESS" | "COMPLETED" | "VERIFIED";
 
 export interface Invoice {
@@ -136,6 +154,9 @@ export interface InvoiceItemDetail {
   testId: number;
   testCode: string;
   testName: string;
+  labId: number;
+  labName: string;
+  outsourced: boolean;
   priceAtSale: string | number;
   orderId: number;
   orderStatus: OrderStatus;

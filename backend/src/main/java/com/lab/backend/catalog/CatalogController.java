@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/catalog")
@@ -21,6 +22,8 @@ public class CatalogController {
 
     private final LabTestRepository tests;
     private final TestTemplateRepository templates;
+    private final LabRepository labs;
+    private final TestLabPriceRepository labPrices;
 
     public record TestRequest(@NotBlank String code,
                               @NotBlank String name,
@@ -81,7 +84,23 @@ public class CatalogController {
         test.setSpecimenType(req.specimenType());
         test.setTemplateId(req.templateId());
         test.setActive(req.isActive() == null || req.isActive());
-        return tests.save(test);
+        LabTest saved = tests.save(test);
+
+        // Keep the in-house price row in sync with the test's base price so the
+        // test is billable at our own lab. (Outsourced-lab prices are managed
+        // separately via the per-lab price endpoints.)
+        labs.findFirstByIsOutsourcedFalse().ifPresent(inHouse -> {
+            TestLabPrice tlp = labPrices.findByTestIdAndLabId(saved.getId(), inHouse.getId())
+                    .orElseGet(() -> {
+                        TestLabPrice n = new TestLabPrice();
+                        n.setTestId(saved.getId());
+                        n.setLabId(inHouse.getId());
+                        return n;
+                    });
+            tlp.setPrice(req.price());
+            labPrices.save(tlp);
+        });
+        return saved;
     }
 
     // ---- Templates ----
@@ -112,5 +131,62 @@ public class CatalogController {
         template.setName(req.name());
         template.setFields(req.fields().toString());
         return TemplateResponse.of(templates.save(template));
+    }
+
+    // ---- Labs & per-lab prices ----
+
+    @GetMapping("/labs")
+    public List<Lab> labs() {
+        return labs.findByIsActiveTrueOrderBySortOrderAscNameAsc();
+    }
+
+    /** One lab's price for a test, with the lab's name and outsourced flag. */
+    public record LabPrice(Long labPriceId, Long labId, String labName, boolean outsourced,
+                           BigDecimal price, boolean active) {}
+
+    /** All labs' prices for a test — powers the POS price comparison. */
+    @GetMapping("/tests/{testId}/prices")
+    public List<LabPrice> testPrices(@PathVariable Long testId) {
+        Map<Long, Lab> labById = labs.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Lab::getId, l -> l));
+        return labPrices.findByTestId(testId).stream()
+                .filter(TestLabPrice::isActive)
+                .map(p -> {
+                    Lab l = labById.get(p.getLabId());
+                    return new LabPrice(p.getId(), p.getLabId(),
+                            l != null ? l.getName() : "?",
+                            l != null && l.isOutsourced(),
+                            p.getPrice(), p.isActive());
+                })
+                .sorted(java.util.Comparator.comparing(LabPrice::outsourced)
+                        .thenComparing(LabPrice::labName))
+                .toList();
+    }
+
+    public record LabPriceRequest(@NotNull Long labId,
+                                  @NotNull @PositiveOrZero BigDecimal price,
+                                  Boolean isActive) {}
+
+    /** Add or update a test's price at a lab (admin). Upsert on (test, lab). */
+    @PutMapping("/tests/{testId}/prices")
+    @PreAuthorize("hasRole('ADMIN')")
+    public LabPrice setTestPrice(@PathVariable Long testId, @Valid @RequestBody LabPriceRequest req) {
+        if (!tests.existsById(testId)) {
+            throw new NotFoundException("Test not found: " + testId);
+        }
+        Lab lab = labs.findById(req.labId())
+                .orElseThrow(() -> new NotFoundException("Lab not found: " + req.labId()));
+        TestLabPrice tlp = labPrices.findByTestIdAndLabId(testId, req.labId())
+                .orElseGet(() -> {
+                    TestLabPrice n = new TestLabPrice();
+                    n.setTestId(testId);
+                    n.setLabId(req.labId());
+                    return n;
+                });
+        tlp.setPrice(req.price());
+        tlp.setActive(req.isActive() == null || req.isActive());
+        tlp = labPrices.save(tlp);
+        return new LabPrice(tlp.getId(), lab.getId(), lab.getName(), lab.isOutsourced(),
+                tlp.getPrice(), tlp.isActive());
     }
 }

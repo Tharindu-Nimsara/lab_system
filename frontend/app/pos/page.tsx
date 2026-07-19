@@ -7,9 +7,19 @@ import {
   ApiError,
   apiUrl,
   InvoiceDetail,
+  LabPrice,
   LabTest,
   Patient,
 } from "@/lib/api";
+
+/** A chosen test line: which lab fulfils it and at what price. */
+interface SelectedLine {
+  test: LabTest;
+  labId: number;
+  labName: string;
+  outsourced: boolean;
+  price: number;
+}
 
 const EMPTY_FORM = {
   name: "",
@@ -35,7 +45,11 @@ export default function PosPage() {
   const [dupes, setDupes] = useState<Patient[]>([]);
 
   const [tests, setTests] = useState<LabTest[]>([]);
-  const [selected, setSelected] = useState<Map<number, LabTest>>(new Map());
+  const [selected, setSelected] = useState<Map<number, SelectedLine>>(new Map());
+  // The test whose lab-price comparison is currently open (test-then-lab flow).
+  const [labPickerTest, setLabPickerTest] = useState<LabTest | null>(null);
+  const [labPrices, setLabPrices] = useState<LabPrice[]>([]);
+  const [labPricesLoading, setLabPricesLoading] = useState(false);
   const [discount, setDiscount] = useState("0");
   const [payNow, setPayNow] = useState(""); // blank = pay full total
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD">("CASH");
@@ -85,7 +99,7 @@ export default function PosPage() {
   }, [form.phone, showCreate]);
 
   const subtotal = useMemo(
-    () => [...selected.values()].reduce((s, t) => s + Number(t.price), 0),
+    () => [...selected.values()].reduce((s, line) => s + line.price, 0),
     [selected],
   );
   const total = Math.max(0, subtotal - Number(discount || 0));
@@ -102,13 +116,64 @@ export default function PosPage() {
     [tests, testFilter],
   );
 
-  function toggleTest(t: LabTest) {
+  function removeTest(testId: number) {
     setSelected((prev) => {
       const next = new Map(prev);
-      if (next.has(t.id)) next.delete(t.id);
-      else next.set(t.id, t);
+      next.delete(testId);
       return next;
     });
+  }
+
+  function addLine(test: LabTest, p: LabPrice) {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      next.set(test.id, {
+        test,
+        labId: p.labId,
+        labName: p.labName,
+        outsourced: p.outsourced,
+        price: Number(p.price),
+      });
+      return next;
+    });
+  }
+
+  /**
+   * Test-then-lab flow: click a test → load every lab's price for it. If our
+   * in-house lab offers it, add it at that price by default; then open the
+   * comparison so reception can switch labs. If in-house doesn't offer it, no
+   * default — the comparison stays open until a lab is chosen.
+   */
+  async function loadLabPrices(test: LabTest) {
+    setLabPickerTest(test);
+    setLabPrices([]);
+    setLabPricesLoading(true);
+    setError("");
+    try {
+      const prices = await api<LabPrice[]>(`/catalog/tests/${test.id}/prices`);
+      setLabPrices(prices);
+      return prices;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load lab prices");
+      return [];
+    } finally {
+      setLabPricesLoading(false);
+    }
+  }
+
+  async function pickTest(test: LabTest) {
+    if (selected.has(test.id)) {
+      removeTest(test.id);
+      return;
+    }
+    const prices = await loadLabPrices(test);
+    const inHouse = prices.find((p) => !p.outsourced);
+    if (inHouse) addLine(test, inHouse); // default to in-house when available
+  }
+
+  /** Open the comparison for an already-selected line (to change its lab). */
+  function openLabPicker(test: LabTest) {
+    loadLabPrices(test);
   }
 
   function selectPatient(p: Patient) {
@@ -271,6 +336,7 @@ export default function PosPage() {
     setForm(EMPTY_FORM);
     setDupes([]);
     setSelected(new Map());
+    setLabPickerTest(null);
     setDiscount("0");
     setPayNow("");
     setPaymentMethod("CASH");
@@ -289,7 +355,7 @@ export default function PosPage() {
         method: "POST",
         body: JSON.stringify({
           patientId: patient.id,
-          testIds: [...selected.keys()],
+          lines: [...selected.values()].map((l) => ({ testId: l.test.id, labId: l.labId })),
           discount: Number(discount || 0),
           paymentMethod,
           // blank = pay the full total; a number records a partial deposit.
@@ -298,6 +364,7 @@ export default function PosPage() {
       });
       setLastInvoice(detail);
       setSelected(new Map());
+      setLabPickerTest(null);
       setDiscount("0");
       setPayNow("");
     } catch (err) {
@@ -597,27 +664,41 @@ export default function PosPage() {
                   No tests selected yet
                 </p>
               ) : (
-                [...selected.values()].map((t) => (
+                [...selected.values()].map((line) => (
                   <div
-                    key={t.id}
-                    className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 dark:border-blue-900 dark:bg-blue-950"
+                    key={line.test.id}
+                    className={`flex items-center justify-between rounded-md border px-3 py-1.5 ${
+                      line.outsourced
+                        ? "border-purple-300 bg-purple-50 dark:border-purple-800 dark:bg-purple-950"
+                        : "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950"
+                    }`}
                   >
                     <span className="flex items-center gap-2">
                       <button
-                        onClick={() => toggleTest(t)}
-                        aria-label={`Remove ${t.name}`}
+                        onClick={() => removeTest(line.test.id)}
+                        aria-label={`Remove ${line.test.name}`}
                         title="Remove"
-                        className="text-blue-400 hover:text-red-500"
+                        className="text-gray-400 hover:text-red-500"
                       >
                         ✕
                       </button>
-                      <span className="font-medium text-blue-900 dark:text-blue-100">
-                        {t.name}
+                      <span>
+                        <span className="font-medium">{line.test.name}</span>
+                        <button
+                          onClick={() => openLabPicker(line.test)}
+                          className={`ml-2 rounded px-1.5 py-0.5 text-xs ${
+                            line.outsourced
+                              ? "bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-100"
+                              : "bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-100"
+                          }`}
+                          title="Change lab"
+                        >
+                          {line.outsourced ? "⇄ " : ""}
+                          {line.labName}
+                        </button>
                       </span>
                     </span>
-                    <span className="tabular-nums text-blue-900 dark:text-blue-100">
-                      {Number(t.price).toFixed(2)}
-                    </span>
+                    <span className="tabular-nums">{line.price.toFixed(2)}</span>
                   </div>
                 ))
               )}
@@ -725,7 +806,7 @@ export default function PosPage() {
             {filteredTests.map((t) => (
               <li key={t.id}>
                 <button
-                  onClick={() => toggleTest(t)}
+                  onClick={() => pickTest(t)}
                   className={`flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm ${
                     selected.has(t.id)
                       ? "bg-blue-600 text-white"
@@ -746,6 +827,83 @@ export default function PosPage() {
         </section>
         </div>
       </main>
+
+      {/* Lab price comparison — pick which lab fulfils the test */}
+      {labPickerTest && (
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setLabPickerTest(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="font-semibold">{labPickerTest.name} — choose lab</h3>
+              <button
+                onClick={() => setLabPickerTest(null)}
+                className="text-sm text-gray-500 hover:underline"
+              >
+                Close
+              </button>
+            </div>
+            <p className="mb-3 text-xs text-gray-500">
+              Prices at each lab that offers this test. Our lab is the default; outsourced
+              partners are highlighted.
+            </p>
+            {labPricesLoading ? (
+              <p className="text-sm text-gray-400">Loading…</p>
+            ) : labPrices.length === 0 ? (
+              <p className="text-sm text-gray-400">No labs offer this test yet.</p>
+            ) : (
+              <ul className="space-y-1">
+                {labPrices.map((p) => {
+                  const chosen = selected.get(labPickerTest.id)?.labId === p.labId;
+                  return (
+                    <li key={p.labId}>
+                      <button
+                        onClick={() => addLine(labPickerTest, p)}
+                        className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm ${
+                          chosen
+                            ? "border-blue-500 bg-blue-50 dark:border-blue-500 dark:bg-blue-950"
+                            : p.outsourced
+                              ? "border-purple-200 hover:bg-purple-50 dark:border-purple-900 dark:hover:bg-purple-950"
+                              : "border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          {chosen && <span className="text-blue-600">✓</span>}
+                          <span className="font-medium">{p.labName}</span>
+                          {p.outsourced ? (
+                            <span className="rounded bg-purple-200 px-1.5 py-0.5 text-xs text-purple-900 dark:bg-purple-900 dark:text-purple-100">
+                              outsourced
+                            </span>
+                          ) : (
+                            <span className="rounded bg-green-200 px-1.5 py-0.5 text-xs text-green-900 dark:bg-green-900 dark:text-green-100">
+                              our lab
+                            </span>
+                          )}
+                        </span>
+                        <span className="tabular-nums font-medium">
+                          {Number(p.price).toFixed(2)}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <div className="mt-3 flex justify-end">
+              <button
+                onClick={() => setLabPickerTest(null)}
+                className="rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

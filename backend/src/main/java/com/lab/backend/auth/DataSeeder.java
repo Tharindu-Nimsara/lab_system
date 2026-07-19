@@ -1,7 +1,11 @@
 package com.lab.backend.auth;
 
+import com.lab.backend.catalog.Lab;
+import com.lab.backend.catalog.LabRepository;
 import com.lab.backend.catalog.LabTest;
 import com.lab.backend.catalog.LabTestRepository;
+import com.lab.backend.catalog.TestLabPrice;
+import com.lab.backend.catalog.TestLabPriceRepository;
 import com.lab.backend.catalog.TestTemplate;
 import com.lab.backend.catalog.TestTemplateRepository;
 import com.lab.backend.common.Branch;
@@ -31,6 +35,8 @@ public class DataSeeder implements CommandLineRunner {
     private final UserRepository users;
     private final TestTemplateRepository templates;
     private final LabTestRepository tests;
+    private final LabRepository labs;
+    private final TestLabPriceRepository labPrices;
     private final PasswordEncoder passwordEncoder;
 
     @Value("${app.seed.admin-password:ChangeMe123!}")
@@ -101,6 +107,16 @@ public class DataSeeder implements CommandLineRunner {
         t.setSpecimenType(specimen);
         t.setTemplateId(template.getId());
         t.setActive(true);
-        tests.save(t);
+        t = tests.save(t);
+
+        // Seed the in-house price so the test is billable at our own lab.
+        Lab inHouse = labs.findFirstByIsOutsourcedFalse().orElse(null);
+        if (inHouse != null) {
+            TestLabPrice tlp = new TestLabPrice();
+            tlp.setTestId(t.getId());
+            tlp.setLabId(inHouse.getId());
+            tlp.setPrice(new BigDecimal(price));
+            labPrices.save(tlp);
+        }
     }
 }

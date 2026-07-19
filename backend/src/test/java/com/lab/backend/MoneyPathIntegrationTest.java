@@ -56,6 +56,7 @@ class MoneyPathIntegrationTest {
     @Autowired AnomalyService anomalies;
     @Autowired DiseaseTrendService diseaseTrends;
     @Autowired LabTestRepository tests;
+    @Autowired com.lab.backend.catalog.LabRepository labs;
     @Autowired OrderRepository orders;
 
     @Test
@@ -72,10 +73,12 @@ class MoneyPathIntegrationTest {
                 null, null, null, false, false), "127.0.0.1");
         assertThat(patient.getId()).isNotNull();
 
-        // 2. Bill it with a partial deposit (400 of the 1200 FBS price).
+        // 2. Bill it at our in-house lab with a partial deposit (400 of 1200).
+        Long inHouseLabId = labs.findFirstByIsOutsourcedFalse().orElseThrow().getId();
         var detail = billing.createInvoice(new BillingController.CreateInvoiceRequest(
-                patient.getId(), List.of(fbs.getId()), BigDecimal.ZERO, "CASH",
-                new BigDecimal("400")), "127.0.0.1");
+                patient.getId(),
+                List.of(new BillingController.LineItem(fbs.getId(), inHouseLabId)),
+                BigDecimal.ZERO, "CASH", new BigDecimal("400")), "127.0.0.1");
         assertThat(detail.items()).hasSize(1);
         assertThat(detail.invoice().getStatus()).isEqualTo("PARTIAL");
         assertThat(detail.invoice().getBalance()).isEqualByComparingTo("800");
