@@ -156,8 +156,10 @@ export default function PosPage() {
     }
   }
 
-  // Registration form: Enter moves to the next field (submitting on the last),
-  // so the whole form is fillable without touching the mouse. Escape cancels.
+  // Registration form: Enter and ↓ move to the next field (Enter submits on the
+  // last), ↑ moves to the previous field, so the whole form is navigable from the
+  // keyboard. Escape cancels. Arrow keys are left to their native behavior inside
+  // the number (Age) and select (Gender) fields, where they increment/choose.
   function onFormKeyDown(e: React.KeyboardEvent<HTMLFormElement>) {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -165,19 +167,36 @@ export default function PosPage() {
       document.querySelector<HTMLInputElement>("#patient-search")?.focus();
       return;
     }
-    if (e.key !== "Enter") return;
+
     const target = e.target as HTMLElement;
-    // Let textareas take Enter for newlines, and let the submit button submit.
+    const isEnter = e.key === "Enter";
+    const isDown = e.key === "ArrowDown";
+    const isUp = e.key === "ArrowUp";
+    if (!isEnter && !isDown && !isUp) return;
+
+    // Textareas and the submit button keep their native keys.
     if (target.tagName === "TEXTAREA" || target.tagName === "BUTTON") return;
+
+    // Arrow keys stay native where they mean something (spin the number, pick an
+    // option); only Enter advances out of those fields.
+    const isNumberOrSelect =
+      target.tagName === "SELECT" ||
+      (target instanceof HTMLInputElement && target.type === "number");
+    if ((isDown || isUp) && isNumberOrSelect) return;
+
     e.preventDefault();
     const focusable = Array.from(
       e.currentTarget.querySelectorAll<HTMLElement>("[data-reg-field]"),
     );
     const idx = focusable.indexOf(target);
-    if (idx > -1 && idx < focusable.length - 1) {
-      focusable[idx + 1].focus();
-    } else {
-      e.currentTarget.requestSubmit();
+    if (idx === -1) return;
+
+    if (isUp) {
+      if (idx > 0) focusable[idx - 1].focus();
+    } else if (idx < focusable.length - 1) {
+      focusable[idx + 1].focus(); // Enter or ↓
+    } else if (isEnter) {
+      e.currentTarget.requestSubmit(); // Enter on the last field submits
     }
   }
 
@@ -307,7 +326,7 @@ export default function PosPage() {
                     className="mt-3 grid grid-cols-2 gap-2 text-base"
                   >
                     <p className="col-span-2 text-xs text-gray-400">
-                      Enter moves to the next field · Esc cancels
+                      Enter / ↓ next field · ↑ previous · Esc cancels
                     </p>
                     <input
                       id="reg-name"

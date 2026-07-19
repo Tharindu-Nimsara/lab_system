@@ -64,13 +64,16 @@ test("keyboard-only registration: search Enter prefills, Enter advances fields",
   await expect(page.locator("#reg-phone")).toHaveValue(phone);
   await expect(page.locator("#reg-name")).toBeFocused();
 
-  // Type the name, then drive the rest of the form with Enter only.
+  // Type the name, then drive fields with ↓ / ↑ arrows.
   await page.keyboard.type("Keyboard Patient");
-  await page.keyboard.press("Enter"); // → phone (already filled)
-  await page.keyboard.press("Enter"); // → NIC
-  await page.keyboard.press("Enter"); // → age
+  await page.keyboard.press("ArrowDown"); // name → phone
+  await expect(page.locator("#reg-phone")).toBeFocused();
+  await page.keyboard.press("ArrowDown"); // phone → NIC
+  await page.keyboard.press("ArrowUp"); // NIC → phone (arrow-up goes back)
+  await expect(page.locator("#reg-phone")).toBeFocused();
+  await page.keyboard.press("ArrowDown"); // phone → NIC
+  await page.keyboard.press("ArrowDown"); // NIC → age
   await page.keyboard.type("33");
-  // Submit from the button to finish (fields after age are optional).
   await page.getByRole("button", { name: "Register patient" }).click();
 
   await expect(page.getByText("Keyboard Patient")).toBeVisible();
