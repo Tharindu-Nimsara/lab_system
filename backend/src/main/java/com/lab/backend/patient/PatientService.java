@@ -23,6 +23,16 @@ public class PatientService {
 
     @Transactional
     public Patient create(PatientController.PatientRequest req, String ip) {
+        // Reject an exact duplicate (same phone + same name). A returning patient
+        // must be reused, not re-created. Same name/different phone or shared phone
+        // with a different name are still allowed (handled by the softer warning).
+        List<Patient> existing = patients.findActiveByNameAndPhone(req.name(), req.phone());
+        if (!existing.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A patient with this name and phone already exists ("
+                            + existing.get(0).getPatientNo() + "). Use the existing record.");
+        }
+
         Patient p = new Patient();
         p.setPatientNo("P-%06d".formatted(patients.nextPatientNo()));
         apply(p, req);

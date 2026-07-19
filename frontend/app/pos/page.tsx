@@ -44,6 +44,10 @@ export default function PosPage() {
   const [error, setError] = useState("");
   const [lastInvoice, setLastInvoice] = useState<InvoiceDetail | null>(null);
 
+  const [noteEditing, setNoteEditing] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+
   useEffect(() => {
     api<LabTest[]>("/catalog/tests").then(setTests).catch(() => {});
   }, []);
@@ -220,6 +224,42 @@ export default function PosPage() {
     }
   }
 
+  function startNoteEdit() {
+    if (!patient) return;
+    setNoteDraft(patient.specialNote ?? "");
+    setNoteEditing(true);
+  }
+
+  // Save the special note inline without leaving POS (keeps reception fast).
+  async function saveNote() {
+    if (!patient) return;
+    setNoteSaving(true);
+    setError("");
+    try {
+      const updated = await api<Patient>(`/patients/${patient.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: patient.name,
+          nicOrId: patient.nicOrId ?? null,
+          dob: patient.dob ?? null,
+          gender: patient.gender ?? null,
+          phone: patient.phone,
+          email: patient.email ?? null,
+          address: patient.address ?? null,
+          specialNote: noteDraft.trim() || null,
+          consentEmail: patient.consentEmail,
+          consentWhatsapp: patient.consentWhatsapp,
+        }),
+      });
+      setPatient(updated);
+      setNoteEditing(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save note");
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
   // Clear the whole POS screen back to a fresh sale.
   function resetPos() {
     setQuery("");
@@ -235,6 +275,7 @@ export default function PosPage() {
     setTestFilter("");
     setError("");
     setLastInvoice(null);
+    setNoteEditing(false);
   }
 
   async function saveInvoice() {
@@ -288,28 +329,81 @@ export default function PosPage() {
           <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
             <h2 className="mb-2 text-lg font-semibold">1 · Patient</h2>
             {patient ? (
-              <div className="flex items-start justify-between rounded-lg bg-blue-50 p-3 text-base dark:bg-blue-950">
-                <div>
-                  <p className="font-semibold">
-                    {patient.name}{" "}
-                    <span className="font-normal text-gray-500">({patient.patientNo})</span>
-                    {patient.age != null && (
-                      <span className="font-normal text-gray-500"> · {patient.age} yrs</span>
-                    )}
-                  </p>
-                  <p className="text-gray-600 dark:text-gray-300">{patient.phone}</p>
-                  {patient.specialNote && (
-                    <p className="mt-1 rounded bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">
-                      ⚠ {patient.specialNote}
+              <div className="rounded-lg bg-blue-50 p-3 text-base dark:bg-blue-950">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-semibold">
+                      {patient.name}{" "}
+                      <span className="font-normal text-gray-500">({patient.patientNo})</span>
+                      {(patient.gender || patient.age != null) && (
+                        <span className="font-normal text-gray-500">
+                          {" · "}
+                          {[patient.gender, patient.age != null ? `${patient.age} yrs` : null]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      )}
                     </p>
+                    <p className="text-gray-600 dark:text-gray-300">{patient.phone}</p>
+                    {patient.specialNote && (
+                      <p className="mt-1 rounded bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                        ⚠ {patient.specialNote}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setPatient(null)}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Change
+                  </button>
+                </div>
+
+                {/* Quick actions */}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => window.open(`/patients/${patient.id}`, "_blank")}
+                    className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900"
+                  >
+                    ✎ Edit patient details
+                  </button>
+                  {!noteEditing && (
+                    <button
+                      onClick={startNoteEdit}
+                      className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900"
+                    >
+                      ⚠ {patient.specialNote ? "Edit special note" : "Add special note"}
+                    </button>
                   )}
                 </div>
-                <button
-                  onClick={() => setPatient(null)}
-                  className="text-xs text-blue-600 hover:underline"
-                >
-                  Change
-                </button>
+
+                {noteEditing && (
+                  <div className="mt-2">
+                    <textarea
+                      autoFocus
+                      rows={2}
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                      placeholder="Special note (allergies, doctor referrals, …)"
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800"
+                    />
+                    <div className="mt-1 flex justify-end gap-2">
+                      <button
+                        onClick={() => setNoteEditing(false)}
+                        className="rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveNote}
+                        disabled={noteSaving}
+                        className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+                      >
+                        {noteSaving ? "Saving…" : "Save note"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <>
@@ -333,7 +427,7 @@ export default function PosPage() {
                       <button
                         onClick={() => selectPatient(p)}
                         onMouseEnter={() => setHighlight(i)}
-                        className={`flex w-full justify-between px-3 py-2.5 text-left text-base ${
+                        className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-base ${
                           i === highlight
                             ? "bg-blue-50 dark:bg-blue-950"
                             : "hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -342,6 +436,14 @@ export default function PosPage() {
                         <span>
                           {p.name}{" "}
                           <span className="text-gray-400">({p.patientNo})</span>
+                          {(p.gender || p.age != null) && (
+                            <span className="text-gray-400">
+                              {" · "}
+                              {[p.gender, p.age != null ? `${p.age} yrs` : null]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          )}
                         </span>
                         <span className="text-gray-500">{p.phone}</span>
                       </button>

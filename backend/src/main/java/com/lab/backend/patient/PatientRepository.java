@@ -23,6 +23,19 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
     @Query("SELECT p FROM Patient p WHERE p.deletedAt IS NULL AND p.phone = :phone ORDER BY p.createdAt")
     List<Patient> findActiveByPhone(@Param("phone") String phone);
 
+    /**
+     * Active patients with the same phone AND (case-insensitive) name — the
+     * "same person" signal used to reject exact duplicates at creation.
+     */
+    @Query("""
+        SELECT p FROM Patient p
+        WHERE p.deletedAt IS NULL
+          AND p.phone = :phone
+          AND LOWER(TRIM(p.name)) = LOWER(TRIM(:name))
+        ORDER BY p.createdAt
+        """)
+    List<Patient> findActiveByNameAndPhone(@Param("name") String name, @Param("phone") String phone);
+
     @Query(value = "SELECT nextval('patient_no_seq')", nativeQuery = true)
     long nextPatientNo();
 
