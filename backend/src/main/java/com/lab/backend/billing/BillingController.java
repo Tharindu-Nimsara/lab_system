@@ -28,15 +28,31 @@ public class BillingController {
     private final BillPdfService billPdf;
     private final PatientRepository patients;
 
+    /**
+     * {@code amountPaid} is the amount collected now: null means pay the full
+     * total, a smaller value records a partial payment (deposit) leaving a balance.
+     */
     public record CreateInvoiceRequest(@NotNull Long patientId,
                                        @NotEmpty List<Long> testIds,
                                        @PositiveOrZero BigDecimal discount,
-                                       @NotNull @Pattern(regexp = "CASH|CARD") String paymentMethod) {}
+                                       @NotNull @Pattern(regexp = "CASH|CARD") String paymentMethod,
+                                       @PositiveOrZero BigDecimal amountPaid) {}
 
     @PostMapping
     public BillingService.InvoiceDetail create(@Valid @RequestBody CreateInvoiceRequest req,
                                                HttpServletRequest http) {
         return service.createInvoice(req, http.getRemoteAddr());
+    }
+
+    /** Take a further payment on an invoice with an outstanding balance. */
+    public record PaymentRequest(@NotNull @PositiveOrZero BigDecimal amount,
+                                 @Pattern(regexp = "CASH|CARD") String paymentMethod) {}
+
+    @PostMapping("/{id}/payments")
+    public BillingService.InvoiceDetail addPayment(@PathVariable Long id,
+                                                   @Valid @RequestBody PaymentRequest req,
+                                                   HttpServletRequest http) {
+        return service.addPayment(id, req, http.getRemoteAddr());
     }
 
     @GetMapping("/{id}")

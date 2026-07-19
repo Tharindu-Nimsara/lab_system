@@ -43,9 +43,37 @@ public class Invoice {
     @Column(name = "payment_method", nullable = false)
     private String paymentMethod;
 
+    /** How much has actually been paid so far; balance = total − amountPaid. */
+    @Column(name = "amount_paid", nullable = false)
+    private BigDecimal amountPaid = BigDecimal.ZERO;
+
+    /** UNPAID | PARTIAL | PAID (derived from payment) — or VOID (independent). */
     @Column(nullable = false)
-    private String status = "PAID";
+    private String status = "UNPAID";
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
+
+    /** Outstanding amount still owed. */
+    @Transient
+    public BigDecimal getBalance() {
+        return total == null ? BigDecimal.ZERO : total.subtract(amountPaid);
+    }
+
+    /**
+     * Recompute the payment status from amountPaid vs total. Does not touch VOID —
+     * a voided invoice stays void regardless of what was paid.
+     */
+    public void recomputeStatus() {
+        if ("VOID".equals(status)) {
+            return;
+        }
+        if (amountPaid.compareTo(BigDecimal.ZERO) <= 0) {
+            status = "UNPAID";
+        } else if (amountPaid.compareTo(total) >= 0) {
+            status = "PAID";
+        } else {
+            status = "PARTIAL";
+        }
+    }
 }

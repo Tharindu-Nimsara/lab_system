@@ -121,7 +121,12 @@ export interface Invoice {
   subtotal: string | number;
   discount: string | number;
   total: string | number;
+  /** Amount collected so far; balance = total − amountPaid. */
+  amountPaid: string | number;
+  /** Outstanding amount (computed server-side). */
+  balance: string | number;
   paymentMethod: string;
+  /** UNPAID | PARTIAL | PAID | VOID */
   status: string;
   createdAt: string;
 }

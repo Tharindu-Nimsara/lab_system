@@ -77,8 +77,14 @@ public class BillPdfService {
             totals.addCell(borderlessRight(inv.getSubtotal().toPlainString()));
             totals.addCell(borderless("Discount"));
             totals.addCell(borderlessRight(inv.getDiscount().toPlainString()));
-            totals.addCell(borderless("Total (" + inv.getPaymentMethod() + ")"));
+            totals.addCell(borderless("Total"));
             totals.addCell(borderlessRight(inv.getTotal().toPlainString()));
+            totals.addCell(borderless("Paid (" + inv.getPaymentMethod() + ")"));
+            totals.addCell(borderlessRight(inv.getAmountPaid().toPlainString()));
+            if (inv.getBalance().signum() > 0) {
+                totals.addCell(borderless("Balance due"));
+                totals.addCell(borderlessRight(inv.getBalance().toPlainString()));
+            }
             doc.add(totals);
         }
 

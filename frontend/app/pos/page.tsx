@@ -37,6 +37,7 @@ export default function PosPage() {
   const [tests, setTests] = useState<LabTest[]>([]);
   const [selected, setSelected] = useState<Map<number, LabTest>>(new Map());
   const [discount, setDiscount] = useState("0");
+  const [payNow, setPayNow] = useState(""); // blank = pay full total
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD">("CASH");
   const [testFilter, setTestFilter] = useState("");
 
@@ -271,6 +272,7 @@ export default function PosPage() {
     setDupes([]);
     setSelected(new Map());
     setDiscount("0");
+    setPayNow("");
     setPaymentMethod("CASH");
     setTestFilter("");
     setError("");
@@ -290,11 +292,14 @@ export default function PosPage() {
           testIds: [...selected.keys()],
           discount: Number(discount || 0),
           paymentMethod,
+          // blank = pay the full total; a number records a partial deposit.
+          amountPaid: payNow === "" ? null : Number(payNow),
         }),
       });
       setLastInvoice(detail);
       setSelected(new Map());
       setDiscount("0");
+      setPayNow("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save invoice");
     } finally {
@@ -634,6 +639,29 @@ export default function PosPage() {
                 <span>Total</span>
                 <span>{total.toFixed(2)}</span>
               </div>
+              <div className="flex items-center justify-between">
+                <span>
+                  Paying now
+                  <span className="ml-1 text-xs text-gray-400">(blank = full)</span>
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  max={total}
+                  placeholder={total.toFixed(2)}
+                  value={payNow}
+                  onChange={(e) => setPayNow(e.target.value)}
+                  className="w-24 rounded border border-gray-300 px-2 py-1 text-right dark:border-gray-700 dark:bg-gray-800"
+                />
+              </div>
+              {payNow !== "" && Number(payNow) < total && (
+                <div className="flex justify-between text-amber-700 dark:text-amber-400">
+                  <span>Balance due</span>
+                  <span className="font-medium">
+                    {(total - Number(payNow || 0)).toFixed(2)}
+                  </span>
+                </div>
+              )}
               <div className="flex gap-2 pt-1">
                 {(["CASH", "CARD"] as const).map((m) => (
                   <button
@@ -664,6 +692,12 @@ export default function PosPage() {
                     {Number(lastInvoice.invoice.total).toFixed(2)} ({lastInvoice.items.length} test
                     {lastInvoice.items.length === 1 ? "" : "s"})
                   </p>
+                  {Number(lastInvoice.invoice.balance) > 0 && (
+                    <p className="font-medium text-amber-700 dark:text-amber-400">
+                      Paid {Number(lastInvoice.invoice.amountPaid).toFixed(2)} · balance due{" "}
+                      {Number(lastInvoice.invoice.balance).toFixed(2)}
+                    </p>
+                  )}
                   <button
                     onClick={() =>
                       window.open(apiUrl(`/invoices/${lastInvoice.invoice.id}/pdf`), "_blank")

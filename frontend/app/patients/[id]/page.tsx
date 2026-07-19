@@ -33,6 +33,12 @@ export default function PatientDetailPage() {
   const [mergeMatches, setMergeMatches] = useState<Patient[]>([]);
   const [merging, setMerging] = useState(false);
 
+  // Inline "take payment" on an outstanding invoice.
+  const [payInvoiceId, setPayInvoiceId] = useState<number | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState<"CASH" | "CARD">("CASH");
+  const [paying, setPaying] = useState(false);
+
   const load = useCallback(() => {
     api<Patient>(`/patients/${id}`)
       .then(setPatient)
@@ -81,6 +87,31 @@ export default function PatientDetailPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Merge failed");
       setMerging(false);
+    }
+  }
+
+  function startPayment(inv: Invoice) {
+    setPayInvoiceId(inv.id);
+    setPayAmount(String(Number(inv.balance))); // default to settling the full balance
+    setPayMethod((inv.paymentMethod as "CASH" | "CARD") ?? "CASH");
+    setError("");
+  }
+
+  async function submitPayment(inv: Invoice) {
+    setPaying(true);
+    setError("");
+    try {
+      await api<unknown>(`/invoices/${inv.id}/payments`, {
+        method: "POST",
+        body: JSON.stringify({ amount: Number(payAmount), paymentMethod: payMethod }),
+      });
+      setPayInvoiceId(null);
+      setPayAmount("");
+      load(); // refresh invoices to show updated balance/status
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to record payment");
+    } finally {
+      setPaying(false);
     }
   }
 
@@ -314,32 +345,97 @@ export default function PatientDetailPage() {
                 <tr>
                   <th className="px-4 py-2">Invoice</th>
                   <th className="px-4 py-2">Date</th>
-                  <th className="px-4 py-2">Total</th>
-                  <th className="px-4 py-2">Payment</th>
+                  <th className="px-4 py-2 text-right">Total</th>
+                  <th className="px-4 py-2 text-right">Paid</th>
+                  <th className="px-4 py-2 text-right">Balance</th>
                   <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {invoices.map((inv) => (
-                  <tr key={inv.id}>
-                    <td className="px-4 py-2">{inv.invoiceNo}</td>
-                    <td className="px-4 py-2">{new Date(inv.createdAt).toLocaleString()}</td>
-                    <td className="px-4 py-2">{Number(inv.total).toFixed(2)}</td>
-                    <td className="px-4 py-2">{inv.paymentMethod}</td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={
-                          inv.status === "VOID" ? "text-red-500" : "text-green-600"
-                        }
-                      >
-                        {inv.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {invoices.map((inv) => {
+                  const balance = Number(inv.balance);
+                  const statusColor =
+                    inv.status === "VOID"
+                      ? "text-red-500"
+                      : inv.status === "PAID"
+                        ? "text-green-600"
+                        : "text-amber-600";
+                  return (
+                    <tr key={inv.id} className="align-top">
+                      <td className="px-4 py-2">{inv.invoiceNo}</td>
+                      <td className="px-4 py-2">
+                        {new Date(inv.createdAt).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {Number(inv.total).toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {Number(inv.amountPaid).toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {balance > 0 ? (
+                          <span className="font-medium text-amber-600">
+                            {balance.toFixed(2)}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={statusColor}>{inv.status}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        {inv.status !== "VOID" && balance > 0 && payInvoiceId !== inv.id && (
+                          <button
+                            onClick={() => startPayment(inv)}
+                            className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                          >
+                            Take payment
+                          </button>
+                        )}
+                        {payInvoiceId === inv.id && (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max={balance}
+                              value={payAmount}
+                              onChange={(e) => setPayAmount(e.target.value)}
+                              className="w-20 rounded border border-gray-300 px-2 py-1 text-right text-xs dark:border-gray-700 dark:bg-gray-800"
+                            />
+                            <select
+                              value={payMethod}
+                              onChange={(e) =>
+                                setPayMethod(e.target.value as "CASH" | "CARD")
+                              }
+                              className="rounded border border-gray-300 px-1 py-1 text-xs dark:border-gray-700 dark:bg-gray-800"
+                            >
+                              <option>CASH</option>
+                              <option>CARD</option>
+                            </select>
+                            <button
+                              disabled={paying}
+                              onClick={() => submitPayment(inv)}
+                              className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-40"
+                            >
+                              {paying ? "…" : "Save"}
+                            </button>
+                            <button
+                              onClick={() => setPayInvoiceId(null)}
+                              className="text-xs text-gray-500 hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {invoices.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
                       No visits yet
                     </td>
                   </tr>

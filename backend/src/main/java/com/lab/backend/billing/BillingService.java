@@ -64,8 +64,17 @@ public class BillingService {
         inv.setCreatedBy(user.getId());
         inv.setSubtotal(subtotal);
         inv.setDiscount(discount);
-        inv.setTotal(subtotal.subtract(discount));
+        BigDecimal total = subtotal.subtract(discount);
+        inv.setTotal(total);
         inv.setPaymentMethod(req.paymentMethod());
+
+        // null amountPaid = pay in full; otherwise a deposit (clamped to the total).
+        BigDecimal paidNow = req.amountPaid() == null ? total : req.amountPaid();
+        if (paidNow.compareTo(total) > 0) {
+            throw new IllegalArgumentException("Amount paid cannot exceed the invoice total");
+        }
+        inv.setAmountPaid(paidNow);
+        inv.recomputeStatus();
         inv = invoices.save(inv);
 
         for (LabTest t : selected) {
@@ -94,6 +103,32 @@ public class BillingService {
         inv.setStatus("VOID");
         inv = invoices.save(inv);
         audit.record(currentUser.require().getId(), "VOID", "Invoice", inv.getId(), null, ip);
+        return detail(inv);
+    }
+
+    /** Record a further payment against an invoice's outstanding balance. */
+    @Transactional
+    public InvoiceDetail addPayment(Long id, BillingController.PaymentRequest req, String ip) {
+        Invoice inv = invoices.findById(id)
+                .orElseThrow(() -> new NotFoundException("Invoice not found: " + id));
+        if ("VOID".equals(inv.getStatus())) {
+            throw new IllegalStateException("Cannot take payment on a void invoice");
+        }
+        BigDecimal amount = req.amount();
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Payment amount must be positive");
+        }
+        if (amount.compareTo(inv.getBalance()) > 0) {
+            throw new IllegalArgumentException(
+                    "Payment " + amount + " exceeds the outstanding balance " + inv.getBalance());
+        }
+        inv.setAmountPaid(inv.getAmountPaid().add(amount));
+        if (req.paymentMethod() != null) {
+            inv.setPaymentMethod(req.paymentMethod());
+        }
+        inv.recomputeStatus();
+        inv = invoices.save(inv);
+        audit.record(currentUser.require().getId(), "PAYMENT", "Invoice", inv.getId(), null, ip);
         return detail(inv);
     }
 

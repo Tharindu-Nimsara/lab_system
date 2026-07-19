@@ -36,19 +36,21 @@ public class AdminController {
 
         long patientsToday = jdbc.sql("""
                 SELECT COUNT(DISTINCT patient_id) FROM invoices
-                WHERE status = 'PAID' AND CAST(created_at AS date) = :d
+                WHERE status <> 'VOID' AND CAST(created_at AS date) = :d
                 """).param("d", today).query(Long.class).single();
 
+        // Cash actually received today (amount_paid), including deposits on
+        // partially-paid invoices.
         BigDecimal revenueToday = jdbc.sql("""
-                SELECT COALESCE(SUM(total), 0) FROM invoices
-                WHERE status = 'PAID' AND CAST(created_at AS date) = :d
+                SELECT COALESCE(SUM(amount_paid), 0) FROM invoices
+                WHERE status <> 'VOID' AND CAST(created_at AS date) = :d
                 """).param("d", today).query(BigDecimal.class).single();
 
         long pendingOrders = jdbc.sql("""
                 SELECT COUNT(*) FROM orders o
                 JOIN invoice_items ii ON ii.id = o.invoice_item_id
                 JOIN invoices i ON i.id = ii.invoice_id
-                WHERE i.status = 'PAID' AND o.status IN ('PENDING','COLLECTED','IN_PROGRESS')
+                WHERE i.status <> 'VOID' AND o.status IN ('PENDING','COLLECTED','IN_PROGRESS')
                 """).query(Long.class).single();
 
         long completedToday = jdbc.sql("""
@@ -59,10 +61,10 @@ public class AdminController {
         List<DayPoint> series = jdbc.sql("""
                 SELECT d.day AS day,
                        COALESCE(COUNT(DISTINCT i.patient_id), 0) AS patients,
-                       COALESCE(SUM(i.total), 0) AS revenue
+                       COALESCE(SUM(i.amount_paid), 0) AS revenue
                 FROM generate_series(CAST(:from AS date), CAST(:to AS date), INTERVAL '1 day') AS d(day)
                 LEFT JOIN invoices i
-                  ON CAST(i.created_at AS date) = d.day AND i.status = 'PAID'
+                  ON CAST(i.created_at AS date) = d.day AND i.status <> 'VOID'
                 GROUP BY d.day
                 ORDER BY d.day
                 """)

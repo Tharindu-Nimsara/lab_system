@@ -72,11 +72,19 @@ class MoneyPathIntegrationTest {
                 null, null, null, false, false), "127.0.0.1");
         assertThat(patient.getId()).isNotNull();
 
-        // 2. Bill it — one transactional call must create the invoice + one order.
+        // 2. Bill it with a partial deposit (400 of the 1200 FBS price).
         var detail = billing.createInvoice(new BillingController.CreateInvoiceRequest(
-                patient.getId(), List.of(fbs.getId()), BigDecimal.ZERO, "CASH"), "127.0.0.1");
+                patient.getId(), List.of(fbs.getId()), BigDecimal.ZERO, "CASH",
+                new BigDecimal("400")), "127.0.0.1");
         assertThat(detail.items()).hasSize(1);
-        assertThat(detail.invoice().getStatus()).isEqualTo("PAID");
+        assertThat(detail.invoice().getStatus()).isEqualTo("PARTIAL");
+        assertThat(detail.invoice().getBalance()).isEqualByComparingTo("800");
+
+        // 2b. Settle the remaining balance — invoice flips to PAID.
+        var settled = billing.addPayment(detail.invoice().getId(),
+                new BillingController.PaymentRequest(new BigDecimal("800"), "CASH"), "127.0.0.1");
+        assertThat(settled.invoice().getStatus()).isEqualTo("PAID");
+        assertThat(settled.invoice().getBalance()).isEqualByComparingTo("0");
         Long orderId = detail.items().get(0).orderId();
         assertThat(orders.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.PENDING);
 
