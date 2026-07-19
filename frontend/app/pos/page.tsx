@@ -558,13 +558,6 @@ export default function PosPage() {
                     />
                     <input
                       data-reg-field
-                      placeholder="NIC / ID"
-                      value={form.nicOrId}
-                      onChange={(e) => setForm({ ...form, nicOrId: e.target.value })}
-                      className="rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
-                    />
-                    <input
-                      data-reg-field
                       type="number"
                       min="0"
                       max="150"
@@ -584,6 +577,13 @@ export default function PosPage() {
                       <option>Female</option>
                       <option>Other</option>
                     </select>
+                    <input
+                      data-reg-field
+                      placeholder="NIC / ID (optional)"
+                      value={form.nicOrId}
+                      onChange={(e) => setForm({ ...form, nicOrId: e.target.value })}
+                      className="col-span-2 rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
+                    />
                     {dupes.length > 0 && (
                       <div className="col-span-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
                         <p className="mb-1 font-medium">
@@ -616,13 +616,13 @@ export default function PosPage() {
                     <input
                       data-reg-field
                       type="email"
-                      placeholder="Email"
+                      placeholder="Email (optional)"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                       className="col-span-2 rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <textarea
-                      placeholder="Special note (allergies, doctor referrals, …)"
+                      placeholder="Special note — optional (allergies, doctor referrals, …)"
                       value={form.specialNote}
                       onChange={(e) => setForm({ ...form, specialNote: e.target.value })}
                       rows={2}
