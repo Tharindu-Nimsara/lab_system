@@ -220,6 +220,23 @@ export default function PosPage() {
     }
   }
 
+  // Clear the whole POS screen back to a fresh sale.
+  function resetPos() {
+    setQuery("");
+    setMatches([]);
+    setHighlight(0);
+    setPatient(null);
+    setShowCreate(false);
+    setForm(EMPTY_FORM);
+    setDupes([]);
+    setSelected(new Map());
+    setDiscount("0");
+    setPaymentMethod("CASH");
+    setTestFilter("");
+    setError("");
+    setLastInvoice(null);
+  }
+
   async function saveInvoice() {
     if (!patient || selected.size === 0) return;
     setSaving(true);
@@ -244,10 +261,28 @@ export default function PosPage() {
     }
   }
 
+  const hasWork =
+    patient !== null ||
+    query !== "" ||
+    showCreate ||
+    selected.size > 0 ||
+    lastInvoice !== null;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Nav />
-      <main className="mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-2">
+      <main className="mx-auto max-w-6xl p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-xl font-semibold">Point of Sale</h1>
+          <button
+            onClick={resetPos}
+            disabled={!hasWork}
+            className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100 disabled:opacity-40 dark:border-gray-700 dark:hover:bg-gray-800"
+          >
+            ↺ Reset
+          </button>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
         {/* Left: patient */}
         <section className="space-y-4">
           <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
@@ -449,12 +484,35 @@ export default function PosPage() {
           <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
             <h2 className="mb-2 font-semibold">3 · Payment</h2>
             <div className="space-y-2 text-sm">
-              {[...selected.values()].map((t) => (
-                <div key={t.id} className="flex justify-between">
-                  <span>{t.name}</span>
-                  <span>{Number(t.price).toFixed(2)}</span>
-                </div>
-              ))}
+              {selected.size === 0 ? (
+                <p className="rounded border border-dashed border-gray-300 px-3 py-2 text-center text-gray-400 dark:border-gray-700">
+                  No tests selected yet
+                </p>
+              ) : (
+                [...selected.values()].map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 dark:border-blue-900 dark:bg-blue-950"
+                  >
+                    <span className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleTest(t)}
+                        aria-label={`Remove ${t.name}`}
+                        title="Remove"
+                        className="text-blue-400 hover:text-red-500"
+                      >
+                        ✕
+                      </button>
+                      <span className="font-medium text-blue-900 dark:text-blue-100">
+                        {t.name}
+                      </span>
+                    </span>
+                    <span className="tabular-nums text-blue-900 dark:text-blue-100">
+                      {Number(t.price).toFixed(2)}
+                    </span>
+                  </div>
+                ))
+              )}
               <div className="flex justify-between border-t border-gray-200 pt-2 dark:border-gray-800">
                 <span>Subtotal</span>
                 <span>{subtotal.toFixed(2)}</span>
@@ -549,6 +607,7 @@ export default function PosPage() {
             ))}
           </ul>
         </section>
+        </div>
       </main>
     </div>
   );

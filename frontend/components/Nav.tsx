@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, Me } from "@/lib/api";
+import ThemeToggle from "./ThemeToggle";
 
 const LINKS: { href: string; label: string; roles: string[] }[] = [
   { href: "/pos", label: "POS", roles: ["ADMIN", "RECEPTIONIST"] },
@@ -46,6 +47,7 @@ export default function Nav() {
         </Link>
       ))}
       <div className="ml-auto flex items-center gap-3 text-sm">
+        <ThemeToggle />
         {me && (
           <>
             <span className="text-gray-500">
