@@ -43,3 +43,36 @@ test("reception can register a patient and bill a test", async ({ page }) => {
   await expect(page.getByText(/Saved .* — total/)).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("button", { name: /Print bill/ })).toBeVisible();
 });
+
+test("keyboard-only registration: search Enter prefills, Enter advances fields", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(EMAIL);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/pos$/);
+
+  // Search a phone that won't match, then Enter to open the prefilled form.
+  const phone = "07" + Date.now().toString().slice(-8);
+  const search = page.locator("#patient-search");
+  await search.click();
+  await search.fill(phone);
+  await page.keyboard.press("Enter");
+
+  // Digits routed to the phone field; focus landed on the empty name field.
+  await expect(page.locator("#reg-phone")).toHaveValue(phone);
+  await expect(page.locator("#reg-name")).toBeFocused();
+
+  // Type the name, then drive the rest of the form with Enter only.
+  await page.keyboard.type("Keyboard Patient");
+  await page.keyboard.press("Enter"); // → phone (already filled)
+  await page.keyboard.press("Enter"); // → NIC
+  await page.keyboard.press("Enter"); // → age
+  await page.keyboard.type("33");
+  // Submit from the button to finish (fields after age are optional).
+  await page.getByRole("button", { name: "Register patient" }).click();
+
+  await expect(page.getByText("Keyboard Patient")).toBeVisible();
+  await expect(page.getByText(/33 yrs/)).toBeVisible();
+});

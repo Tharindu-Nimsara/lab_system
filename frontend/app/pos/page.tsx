@@ -27,6 +27,7 @@ const EMPTY_FORM = {
 export default function PosPage() {
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<Patient[]>([]);
+  const [highlight, setHighlight] = useState(0);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -54,7 +55,10 @@ export default function PosPage() {
     }
     const t = setTimeout(() => {
       api<Patient[]>(`/patients?search=${encodeURIComponent(query.trim())}`)
-        .then(setMatches)
+        .then((rows) => {
+          setMatches(rows);
+          setHighlight(0); // reset keyboard cursor to the top result
+        })
         .catch(() => setMatches([]));
     }, 250);
     return () => clearTimeout(t);
@@ -100,6 +104,81 @@ export default function PosPage() {
       else next.set(t.id, t);
       return next;
     });
+  }
+
+  function selectPatient(p: Patient) {
+    setPatient(p);
+    setQuery("");
+    setMatches([]);
+    setShowCreate(false);
+  }
+
+  /**
+   * Open the registration form with the typed search text prefilled. Digits →
+   * phone, anything else → name, so a phone search and a name search each land
+   * in the right field with nothing to retype.
+   */
+  function openCreatePrefilled(text: string) {
+    const trimmed = text.trim();
+    const isPhone = trimmed.length > 0 && /^[0-9+\-\s]+$/.test(trimmed);
+    setForm({
+      ...EMPTY_FORM,
+      name: isPhone ? "" : trimmed,
+      phone: isPhone ? trimmed.replace(/[^0-9+]/g, "") : "",
+    });
+    setShowCreate(true);
+    setMatches([]);
+    // Focus the first empty of the two prefill fields after render.
+    setTimeout(() => {
+      const first = document.querySelector<HTMLInputElement>(
+        isPhone ? "#reg-name" : "#reg-phone",
+      );
+      first?.focus();
+    }, 0);
+  }
+
+  // Search box: ↓/↑ move the highlight, Enter selects it (or opens a prefilled
+  // new-patient form when there's no match to select).
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((h) => Math.min(h + 1, matches.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (matches.length > 0 && matches[highlight]) {
+        selectPatient(matches[highlight]);
+      } else if (query.trim().length >= 2) {
+        openCreatePrefilled(query);
+      }
+    }
+  }
+
+  // Registration form: Enter moves to the next field (submitting on the last),
+  // so the whole form is fillable without touching the mouse. Escape cancels.
+  function onFormKeyDown(e: React.KeyboardEvent<HTMLFormElement>) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setShowCreate(false);
+      document.querySelector<HTMLInputElement>("#patient-search")?.focus();
+      return;
+    }
+    if (e.key !== "Enter") return;
+    const target = e.target as HTMLElement;
+    // Let textareas take Enter for newlines, and let the submit button submit.
+    if (target.tagName === "TEXTAREA" || target.tagName === "BUTTON") return;
+    e.preventDefault();
+    const focusable = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>("[data-reg-field]"),
+    );
+    const idx = focusable.indexOf(target);
+    if (idx > -1 && idx < focusable.length - 1) {
+      focusable[idx + 1].focus();
+    } else {
+      e.currentTarget.requestSubmit();
+    }
   }
 
   async function createPatient(e: React.FormEvent) {
@@ -153,9 +232,9 @@ export default function PosPage() {
         {/* Left: patient */}
         <section className="space-y-4">
           <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-            <h2 className="mb-2 font-semibold">1 · Patient</h2>
+            <h2 className="mb-2 text-lg font-semibold">1 · Patient</h2>
             {patient ? (
-              <div className="flex items-start justify-between rounded-lg bg-blue-50 p-3 text-sm dark:bg-blue-950">
+              <div className="flex items-start justify-between rounded-lg bg-blue-50 p-3 text-base dark:bg-blue-950">
                 <div>
                   <p className="font-semibold">
                     {patient.name}{" "}
@@ -181,22 +260,30 @@ export default function PosPage() {
             ) : (
               <>
                 <input
+                  id="patient-search"
                   placeholder="Search by phone or name…"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={onSearchKeyDown}
                   autoFocus
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+                  className="w-full rounded border border-gray-300 px-3 py-2.5 text-lg dark:border-gray-700 dark:bg-gray-800"
                 />
+                {query.trim().length >= 2 && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    ↑↓ to move · Enter to {matches.length > 0 ? "select" : "register new"}
+                  </p>
+                )}
                 <ul className="mt-2 divide-y divide-gray-100 dark:divide-gray-800">
-                  {matches.map((p) => (
+                  {matches.map((p, i) => (
                     <li key={p.id}>
                       <button
-                        onClick={() => {
-                          setPatient(p);
-                          setQuery("");
-                          setMatches([]);
-                        }}
-                        className="flex w-full justify-between px-2 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
+                        onClick={() => selectPatient(p)}
+                        onMouseEnter={() => setHighlight(i)}
+                        className={`flex w-full justify-between px-3 py-2.5 text-left text-base ${
+                          i === highlight
+                            ? "bg-blue-50 dark:bg-blue-950"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                        }`}
                       >
                         <span>
                           {p.name}{" "}
@@ -208,46 +295,60 @@ export default function PosPage() {
                   ))}
                 </ul>
                 <button
-                  onClick={() => setShowCreate((v) => !v)}
-                  className="mt-2 text-sm text-blue-600 hover:underline"
+                  onClick={() => openCreatePrefilled(query)}
+                  className="mt-2 text-base text-blue-600 hover:underline"
                 >
-                  + New patient
+                  + New patient <span className="text-gray-400">(or press Enter)</span>
                 </button>
                 {showCreate && (
-                  <form onSubmit={createPatient} className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <form
+                    onSubmit={createPatient}
+                    onKeyDown={onFormKeyDown}
+                    className="mt-3 grid grid-cols-2 gap-2 text-base"
+                  >
+                    <p className="col-span-2 text-xs text-gray-400">
+                      Enter moves to the next field · Esc cancels
+                    </p>
                     <input
+                      id="reg-name"
+                      data-reg-field
                       required
                       placeholder="Full name *"
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="col-span-2 rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
+                      className="col-span-2 rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <input
+                      id="reg-phone"
+                      data-reg-field
                       required
                       placeholder="Phone *"
                       value={form.phone}
                       onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      className="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
+                      className="rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <input
+                      data-reg-field
                       placeholder="NIC / ID"
                       value={form.nicOrId}
                       onChange={(e) => setForm({ ...form, nicOrId: e.target.value })}
-                      className="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
+                      className="rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <input
+                      data-reg-field
                       type="number"
                       min="0"
                       max="150"
                       placeholder="Age"
                       value={form.age}
                       onChange={(e) => setForm({ ...form, age: e.target.value })}
-                      className="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
+                      className="rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <select
+                      data-reg-field
                       value={form.gender}
                       onChange={(e) => setForm({ ...form, gender: e.target.value })}
-                      className="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
+                      className="rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
                     >
                       <option value="">Gender…</option>
                       <option>Male</option>
@@ -284,21 +385,23 @@ export default function PosPage() {
                       </div>
                     )}
                     <input
+                      data-reg-field
                       type="email"
                       placeholder="Email"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      className="col-span-2 rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
+                      className="col-span-2 rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <textarea
                       placeholder="Special note (allergies, doctor referrals, …)"
                       value={form.specialNote}
                       onChange={(e) => setForm({ ...form, specialNote: e.target.value })}
                       rows={2}
-                      className="col-span-2 rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
+                      className="col-span-2 rounded border border-gray-300 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
                     />
                     <label className="flex items-center gap-2">
                       <input
+                        data-reg-field
                         type="checkbox"
                         checked={form.consentEmail}
                         onChange={(e) => setForm({ ...form, consentEmail: e.target.checked })}
@@ -307,13 +410,14 @@ export default function PosPage() {
                     </label>
                     <label className="flex items-center gap-2">
                       <input
+                        data-reg-field
                         type="checkbox"
                         checked={form.consentWhatsapp}
                         onChange={(e) => setForm({ ...form, consentWhatsapp: e.target.checked })}
                       />
                       WhatsApp consent
                     </label>
-                    <button className="col-span-2 rounded bg-blue-600 py-2 font-medium text-white hover:bg-blue-700">
+                    <button className="col-span-2 rounded bg-blue-600 py-2.5 font-medium text-white hover:bg-blue-700">
                       Register patient
                     </button>
                   </form>
