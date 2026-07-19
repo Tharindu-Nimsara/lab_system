@@ -347,7 +347,8 @@ export default function PosPage() {
                     <p className="text-gray-600 dark:text-gray-300">{patient.phone}</p>
                     {patient.specialNote && (
                       <p className="mt-1 rounded bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">
-                        ⚠ {patient.specialNote}
+                        <span className="font-semibold">⚠ Special note:</span>{" "}
+                        {patient.specialNote}
                       </p>
                     )}
                   </div>
