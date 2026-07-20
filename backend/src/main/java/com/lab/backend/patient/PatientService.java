@@ -55,6 +55,12 @@ public class PatientService {
         return patients.search(query, PageRequest.of(0, 20));
     }
 
+    /** Browse all active patients, newest first, paginated (no search term). */
+    public org.springframework.data.domain.Page<Patient> browse(int page, int size) {
+        return patients.findByDeletedAtIsNullOrderByCreatedAtDesc(
+                PageRequest.of(page, size));
+    }
+
     /** Existing active patients on this exact phone — reception uses this to catch duplicates. */
     public List<Patient> duplicatesByPhone(String phone) {
         return phone == null || phone.isBlank() ? List.of()

@@ -1,34 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Nav from "@/components/Nav";
-import { api, Patient } from "@/lib/api";
+import { api, PageResponse, Patient } from "@/lib/api";
+
+const PAGE_SIZE = 20;
 
 export default function PatientsPage() {
   const [query, setQuery] = useState("");
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [loading, setLoading] = useState(false);
 
+  const searching = query.trim().length >= 2;
+
+  const loadBrowse = useCallback((p: number) => {
+    setLoading(true);
+    api<PageResponse<Patient>>(`/patients/browse?page=${p}&size=${PAGE_SIZE}`)
+      .then((res) => {
+        setPatients(res.content);
+        setPage(res.page);
+        setTotalPages(res.totalPages);
+        setTotalElements(res.totalElements);
+      })
+      .catch(() => setPatients([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Default view: browse all registered patients, newest first.
   useEffect(() => {
-    if (query.trim().length < 2) {
-      setPatients([]);
-      return;
-    }
+    if (!searching) loadBrowse(0);
+  }, [searching, loadBrowse]);
+
+  // While typing 2+ characters, switch to a flat search result instead.
+  useEffect(() => {
+    if (!searching) return;
     const t = setTimeout(() => {
+      setLoading(true);
       api<Patient[]>(`/patients?search=${encodeURIComponent(query.trim())}`)
         .then(setPatients)
-        .catch(() => setPatients([]));
+        .catch(() => setPatients([]))
+        .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, searching]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Nav />
       <main className="mx-auto max-w-4xl p-6">
-        <h1 className="mb-4 text-lg font-semibold">Patients</h1>
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-lg font-semibold">Patients</h1>
+          {!searching && totalElements > 0 && (
+            <span className="text-sm text-gray-500">{totalElements} registered</span>
+          )}
+        </div>
         <input
-          placeholder="Search by phone or name (min 2 characters)…"
+          placeholder="Search by phone or name (min 2 characters)… leave blank to browse all"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus
@@ -62,13 +93,34 @@ export default function PatientsPage() {
               {patients.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                    {query.trim().length < 2 ? "Type to search patients" : "No matches"}
+                    {loading ? "Loading…" : searching ? "No matches" : "No patients registered yet"}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        {!searching && totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between text-sm">
+            <button
+              disabled={page <= 0}
+              onClick={() => loadBrowse(page - 1)}
+              className="rounded border border-gray-300 px-3 py-1 disabled:opacity-40 dark:border-gray-700"
+            >
+              ← Previous
+            </button>
+            <span className="text-gray-500">
+              Page {page + 1} of {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages - 1}
+              onClick={() => loadBrowse(page + 1)}
+              className="rounded border border-gray-300 px-3 py-1 disabled:opacity-40 dark:border-gray-700"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );

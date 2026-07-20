@@ -86,6 +86,14 @@ export interface Patient {
   createdAt?: string;
 }
 
+export interface PageResponse<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
 export interface TemplateField {
   key: string;
   label: string;

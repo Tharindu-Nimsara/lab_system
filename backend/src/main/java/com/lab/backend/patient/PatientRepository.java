@@ -19,6 +19,9 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
         """)
     List<Patient> search(@Param("q") String query, Pageable page);
 
+    /** All active patients, newest first — powers the browse view on the Patients page. */
+    org.springframework.data.domain.Page<Patient> findByDeletedAtIsNullOrderByCreatedAtDesc(Pageable page);
+
     /** Active patients whose phone matches exactly — powers duplicate warnings. */
     @Query("SELECT p FROM Patient p WHERE p.deletedAt IS NULL AND p.phone = :phone ORDER BY p.createdAt")
     List<Patient> findActiveByPhone(@Param("phone") String phone);
