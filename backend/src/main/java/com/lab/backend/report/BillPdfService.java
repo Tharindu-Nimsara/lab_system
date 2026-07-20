@@ -28,14 +28,32 @@ public class BillPdfService {
 
     private final LabInfo lab;
 
+    /** Which copies to include when rendering a bill. */
+    public enum Copy { PATIENT, WORKSHEET, BOTH }
+
+    /** Backwards-compatible entry point — renders both copies. */
     public byte[] render(BillingService.InvoiceDetail detail, Patient patient) {
+        return render(detail, patient, Copy.BOTH);
+    }
+
+    /**
+     * Render the requested copies. Each requested copy starts on its own page so
+     * reception can print the patient bill and the lab worksheet separately.
+     */
+    public byte[] render(BillingService.InvoiceDetail detail, Patient patient, Copy which) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Document doc = new Document(PageSize.A5, 24, 24, 20, 20);
         PdfWriter.getInstance(doc, out);
         doc.open();
-        copy(doc, detail, patient, "INVOICE — PATIENT COPY", false);
-        doc.newPage();
-        copy(doc, detail, patient, "LAB WORKSHEET COPY", true);
+        boolean first = true;
+        if (which == Copy.PATIENT || which == Copy.BOTH) {
+            copy(doc, detail, patient, "INVOICE — PATIENT COPY", false);
+            first = false;
+        }
+        if (which == Copy.WORKSHEET || which == Copy.BOTH) {
+            if (!first) doc.newPage();
+            copy(doc, detail, patient, "LAB WORKSHEET COPY", true);
+        }
         doc.close();
         return out.toByteArray();
     }

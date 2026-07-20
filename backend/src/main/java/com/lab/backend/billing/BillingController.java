@@ -70,16 +70,29 @@ public class BillingController {
         return service.forPatient(patientId);
     }
 
+    /**
+     * Bill PDF. {@code copy} selects which copies to print: {@code patient},
+     * {@code worksheet}, or {@code both} (default) — reception can print each
+     * separately or the combined document.
+     */
     @GetMapping("/{id}/pdf")
-    public ResponseEntity<byte[]> pdf(@PathVariable Long id) {
+    public ResponseEntity<byte[]> pdf(@PathVariable Long id,
+                                      @RequestParam(name = "copy", defaultValue = "both") String copy) {
         BillingService.InvoiceDetail detail = service.get(id);
         Patient patient = patients.findById(detail.invoice().getPatientId())
                 .orElseThrow(() -> new NotFoundException("Patient not found"));
+        var which = switch (copy.toLowerCase()) {
+            case "patient" -> com.lab.backend.report.BillPdfService.Copy.PATIENT;
+            case "worksheet" -> com.lab.backend.report.BillPdfService.Copy.WORKSHEET;
+            default -> com.lab.backend.report.BillPdfService.Copy.BOTH;
+        };
+        String suffix = which == com.lab.backend.report.BillPdfService.Copy.BOTH ? ""
+                : "-" + copy.toLowerCase();
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header("Content-Disposition",
-                        "inline; filename=" + detail.invoice().getInvoiceNo() + ".pdf")
-                .body(billPdf.render(detail, patient));
+                        "inline; filename=" + detail.invoice().getInvoiceNo() + suffix + ".pdf")
+                .body(billPdf.render(detail, patient, which));
     }
 
     @PostMapping("/{id}/void")

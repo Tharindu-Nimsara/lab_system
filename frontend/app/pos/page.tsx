@@ -779,14 +779,38 @@ export default function PosPage() {
                       {Number(lastInvoice.invoice.balance).toFixed(2)}
                     </p>
                   )}
-                  <button
-                    onClick={() =>
-                      window.open(apiUrl(`/invoices/${lastInvoice.invoice.id}/pdf`), "_blank")
-                    }
-                    className="mt-1 rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
-                  >
-                    Print bill (2 copies)
-                  </button>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <button
+                      onClick={() =>
+                        window.open(
+                          apiUrl(`/invoices/${lastInvoice.invoice.id}/pdf?copy=patient`),
+                          "_blank",
+                        )
+                      }
+                      className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
+                    >
+                      Print patient copy
+                    </button>
+                    <button
+                      onClick={() =>
+                        window.open(
+                          apiUrl(`/invoices/${lastInvoice.invoice.id}/pdf?copy=worksheet`),
+                          "_blank",
+                        )
+                      }
+                      className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
+                    >
+                      Print lab copy
+                    </button>
+                    <button
+                      onClick={() =>
+                        window.open(apiUrl(`/invoices/${lastInvoice.invoice.id}/pdf`), "_blank")
+                      }
+                      className="rounded bg-green-700 px-3 py-1 text-xs font-medium text-white hover:bg-green-800"
+                    >
+                      Print both
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

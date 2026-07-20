@@ -31,4 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### JVM crash / replay dumps ###
 hs_err_pid*.log
+replay_pid*.log
