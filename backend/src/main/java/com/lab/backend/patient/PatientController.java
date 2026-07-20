@@ -54,11 +54,16 @@ public class PatientController {
     public record PageResponse<T>(List<T> content, int page, int size,
                                   long totalElements, int totalPages) {}
 
-    /** Browse all registered patients, newest first — for the Patients tab list view. */
+    /**
+     * Browse registered patients, newest first — for the Patients tab list view.
+     * Optional {@code days} narrows to a recent window (1 = today, 2 = +yesterday,
+     * 3 = past 3 days); omit it (or 0) to browse everyone.
+     */
     @GetMapping("/browse")
     public PageResponse<Patient> browse(@RequestParam(name = "page", defaultValue = "0") int page,
-                                        @RequestParam(name = "size", defaultValue = "20") int size) {
-        var result = service.browse(page, size);
+                                        @RequestParam(name = "size", defaultValue = "20") int size,
+                                        @RequestParam(name = "days", required = false) Integer days) {
+        var result = service.browse(page, size, days);
         return new PageResponse<>(result.getContent(), result.getNumber(), result.getSize(),
                 result.getTotalElements(), result.getTotalPages());
     }

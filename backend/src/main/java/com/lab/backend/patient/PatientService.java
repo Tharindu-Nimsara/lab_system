@@ -55,10 +55,22 @@ public class PatientService {
         return patients.search(query, PageRequest.of(0, 20));
     }
 
-    /** Browse all active patients, newest first, paginated (no search term). */
-    public org.springframework.data.domain.Page<Patient> browse(int page, int size) {
-        return patients.findByDeletedAtIsNullOrderByCreatedAtDesc(
-                PageRequest.of(page, size));
+    /**
+     * Browse active patients, newest first, paginated. When {@code days} is given
+     * (1 = today, 2 = today+yesterday, 3 = past 3 days), only patients registered
+     * within that window are returned; otherwise all patients.
+     */
+    public org.springframework.data.domain.Page<Patient> browse(int page, int size, Integer days) {
+        var pageable = PageRequest.of(page, size);
+        if (days == null || days <= 0) {
+            return patients.findByDeletedAtIsNullOrderByCreatedAtDesc(pageable);
+        }
+        // Start of the day (days-1) days ago, in the server's local zone.
+        OffsetDateTime from = java.time.LocalDate.now()
+                .minusDays(days - 1L)
+                .atStartOfDay(java.time.ZoneId.systemDefault())
+                .toOffsetDateTime();
+        return patients.findActiveSince(from, pageable);
     }
 
     /** Existing active patients on this exact phone — reception uses this to catch duplicates. */
